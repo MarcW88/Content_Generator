@@ -812,11 +812,87 @@ elif page == "settings":
                     st.rerun()
 
     # ── Coûts de tarification ─────────────────────────────────────────────────
-    st.markdown('<div class="section-hdr">Grille tarifaire utilisée</div>', unsafe_allow_html=True)
-    from cost_tracker import PRICING, DATAFORSEO_COST_PER_TASK
+    st.markdown('<div class="section-hdr">Coût estimé par article</div>', unsafe_allow_html=True)
+
+    st.info(
+        "💡 **Ces prix sont en USD par million de tokens (MTok)** — pas par article.\n\n"
+        "Un article de ~1 500 mots consomme environ **5 000 à 12 000 tokens** en tout. "
+        "Le coût réel tourne entre **$0.10 et $0.35 par article**, selon que le style profile "
+        "est déjà en cache ou non.\n\n"
+        "Claude Opus n'est utilisé qu'**une seule fois** pour analyser le style du site (puis mis en cache). "
+        "Les 4 passes de rédaction utilisent Claude Sonnet (3× moins cher)."
+    )
+
+    from cost_tracker import PRICING, DATAFORSEO_COST_PER_TASK, ESTIMATE
+
+    # Coût estimé par poste
+    cost_rows = [
+        {
+            "Poste": "Style profile — Claude Opus (1ère fois seulement, puis cache)",
+            "Modèle": "claude-opus-4-5",
+            "Tokens estimés": "~12 400 in / 400 out",
+            "Coût estimé": format_usd(ESTIMATE["tone_analyzer"].usd),
+        },
+        {
+            "Poste": "Passe 1 — Introduction",
+            "Modèle": "claude-sonnet-4-5",
+            "Tokens estimés": "~800 in / 200 out",
+            "Coût estimé": format_usd(ESTIMATE["pass1"].usd),
+        },
+        {
+            "Poste": "Passe 2 — Plan H2/H3",
+            "Modèle": "claude-sonnet-4-5",
+            "Tokens estimés": "~1 200 in / 500 out",
+            "Coût estimé": format_usd(ESTIMATE["pass2"].usd),
+        },
+        {
+            "Poste": "Passe 3 — Corps de l'article",
+            "Modèle": "claude-sonnet-4-5",
+            "Tokens estimés": "~2 500 in / 2 000 out",
+            "Coût estimé": format_usd(ESTIMATE["pass3"].usd),
+        },
+        {
+            "Poste": "Passe 4 — Méta + Révision",
+            "Modèle": "claude-sonnet-4-5",
+            "Tokens estimés": "~4 000 in / 2 500 out",
+            "Coût estimé": format_usd(ESTIMATE["pass4"].usd),
+        },
+        {
+            "Poste": "DataForSEO (SERP + PAA + clustering)",
+            "Modèle": "—",
+            "Tokens estimés": "3 tâches × $0.0025",
+            "Coût estimé": format_usd(3 * DATAFORSEO_COST_PER_TASK),
+        },
+    ]
+
+    passes_cost = sum(ESTIMATE[k].usd for k in ("pass1","pass2","pass3","pass4"))
+    total_first = ESTIMATE["tone_analyzer"].usd + passes_cost + 3 * DATAFORSEO_COST_PER_TASK
+    total_cached = passes_cost + 3 * DATAFORSEO_COST_PER_TASK
+
+    st.dataframe(cost_rows, use_container_width=True, hide_index=True)
+
+    t1, t2 = st.columns(2)
+    t1.markdown(
+        f'<div class="kpi-card">'
+        f'<div class="kpi-label">1er article (style à créer)</div>'
+        f'<div class="kpi-value">{format_usd(total_first)}</div>'
+        f'<div class="kpi-sub">inclut analyse tonale Claude Opus</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    t2.markdown(
+        f'<div class="kpi-card">'
+        f'<div class="kpi-label">Articles suivants (style en cache)</div>'
+        f'<div class="kpi-value">{format_usd(total_cached)}</div>'
+        f'<div class="kpi-sub">4 passes Sonnet + DataForSEO uniquement</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="section-hdr">Tarifs Anthropic bruts (USD / million tokens)</div>', unsafe_allow_html=True)
     pricing_rows = [
-        {"Modèle": m, "Input (USD/MTok)": f"${v['input']}", "Output (USD/MTok)": f"${v['output']}"}
+        {"Modèle": m, "Input (USD/MTok)": f"${v['input']}", "Output (USD/MTok)": f"${v['output']}",
+         "Explication": "4 passes rédaction" if "sonnet" in m else "Analyse style (1× puis cache)"}
         for m, v in PRICING.items()
     ]
-    pricing_rows.append({"Modèle": "DataForSEO (par tâche)", "Input (USD/MTok)": f"${DATAFORSEO_COST_PER_TASK}", "Output (USD/MTok)": "—"})
     st.dataframe(pricing_rows, use_container_width=True, hide_index=True)
