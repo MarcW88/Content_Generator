@@ -31,62 +31,107 @@ logging.basicConfig(level=logging.INFO,
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
   /* Hide sidebar */
   [data-testid="collapsedControl"] { display: none !important; }
   section[data-testid="stSidebar"]  { display: none !important; }
 
   /* Base */
-  .stApp { background: #f4f5f7; }
-  .stApp p, .stApp li, .stApp label { color: #1a1d2e !important; }
-  .stApp h1, .stApp h2, .stApp h3 { color: #1a1d2e !important; }
+  .stApp { background: #f7f8fa; font-family: 'Inter', system-ui, sans-serif; }
+  .stApp p, .stApp li { color: #374151 !important; font-size: 14px; }
+  .stApp label { color: #374151 !important; font-size: 13px; font-weight: 600; }
+  .stApp h1 { color: #0f172a !important; font-size: 22px; font-weight: 800; }
+  .stApp h2 { color: #0f172a !important; font-size: 18px; font-weight: 700; }
+  .stApp h3 { color: #1e293b !important; font-size: 15px; font-weight: 600; }
+
+  /* Inputs */
+  [data-testid="stTextInput"] input,
+  [data-testid="stSelectbox"] > div > div {
+    border-radius: 8px !important; font-size: 13px !important;
+    border-color: #d1d5db !important;
+  }
+  [data-testid="stTextInput"] input:focus { border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.12) !important; }
+
+  /* Primary button */
+  button[kind="primary"] {
+    background: #3b82f6 !important; border-radius: 8px !important;
+    font-weight: 700 !important; font-size: 13px !important; border: none !important;
+    padding: 10px 20px !important; transition: background .2s !important;
+  }
+  button[kind="primary"]:hover { background: #2563eb !important; }
 
   /* Top nav */
   .nav-bar {
     display: flex; align-items: center; justify-content: space-between;
-    background: #ffffff; border-bottom: 1px solid #e2e5ed;
-    padding: 0 32px; height: 58px; margin-bottom: 28px;
-    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    background: #ffffff; border-bottom: 2px solid #e5e7eb;
+    padding: 0 32px; height: 60px; margin-bottom: 28px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
   }
-  .nav-brand { color: #1a1d2e; font-size: 16px; font-weight: 800; }
-  .nav-brand span { color: #4f6ef7; }
+  .nav-brand { color: #0f172a; font-size: 15px; font-weight: 800; letter-spacing: -.3px; }
+  .nav-brand span { color: #3b82f6; }
+  .nav-links { display: flex; gap: 4px; }
+  .nav-link {
+    padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    color: #6b7280; text-decoration: none; cursor: pointer; border: none;
+    background: transparent; transition: all .15s;
+  }
+  .nav-link:hover { background: #f3f4f6; color: #0f172a; }
+  .nav-link.active { background: #eff6ff; color: #3b82f6; }
 
   /* KPI cards */
   .kpi-card {
-    background: #ffffff; border: 1px solid #e2e5ed; border-radius: 12px;
-    padding: 20px 24px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px;
+    padding: 20px 24px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
   }
-  .kpi-label { color: #6b7280; font-size: 11px; font-weight: 700;
+  .kpi-label { color: #9ca3af; font-size: 11px; font-weight: 700;
                letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
-  .kpi-value { color: #1a1d2e; font-size: 26px; font-weight: 800; line-height: 1; }
-  .kpi-sub   { color: #4f6ef7; font-size: 12px; margin-top: 6px; }
+  .kpi-value { color: #0f172a; font-size: 28px; font-weight: 800; line-height: 1; }
+  .kpi-sub   { color: #3b82f6; font-size: 12px; font-weight: 500; margin-top: 6px; }
 
   /* Pipeline stepper */
   .pipeline-wrapper {
-    background: #ffffff; border: 1px solid #e2e5ed; border-radius: 14px;
-    padding: 28px 32px; margin: 20px 0;
-    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px;
+    padding: 24px 28px; margin: 16px 0 24px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05);
   }
   .pipeline-title {
-    font-size: 13px; font-weight: 700; color: #6b7280;
-    text-transform: uppercase; letter-spacing: .08em; margin-bottom: 22px;
+    font-size: 11px; font-weight: 700; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: .1em; margin-bottom: 20px;
   }
-  .step-row { display: flex; gap: 12px; align-items: stretch; }
+  .step-row { display: flex; gap: 10px; align-items: stretch; }
   .step-box {
-    flex: 1; background: #f8f9fc; border: 2px solid #e2e5ed;
-    border-radius: 10px; padding: 16px 12px; text-align: center;
-    transition: all .2s;
+    flex: 1; background: #f9fafb; border: 2px solid #e5e7eb;
+    border-radius: 12px; padding: 16px 10px; text-align: center;
+    transition: all .2s ease;
   }
   .step-box.running {
-    background: #eff3ff; border-color: #4f6ef7;
-    box-shadow: 0 0 0 3px rgba(79,110,247,.12);
+    background: #eff6ff; border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+    animation: pulse-border 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-border {
+    0%,100% { box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+    50%      { box-shadow: 0 0 0 6px rgba(59,130,246,.06); }
   }
   .step-box.done    { background: #f0fdf4; border-color: #22c55e; }
-  .step-box.error   { background: #fff5f5; border-color: #ef4444; }
-  .step-num   { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; margin-bottom: 8px; }
-  .step-icon  { font-size: 26px; margin-bottom: 6px; }
-  .step-name  { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 4px; }
-  .step-detail{ font-size: 11px; color: #6b7280; min-height: 16px; }
-  .step-cost  { font-size: 11px; color: #22c55e; font-weight: 600; margin-top: 4px; }
+  .step-box.error   { background: #fef2f2; border-color: #ef4444; }
+  .step-num   { font-size: 10px; font-weight: 700; color: #d1d5db;
+                text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+  .step-box.running .step-num { color: #3b82f6; }
+  .step-box.done    .step-num { color: #22c55e; }
+  .step-box.error   .step-num { color: #ef4444; }
+  .step-icon  { font-size: 24px; margin-bottom: 6px; }
+  .step-name  { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 3px; }
+  .step-detail{ font-size: 11px; color: #9ca3af; min-height: 15px; }
+  .step-cost  { font-size: 11px; color: #16a34a; font-weight: 600; margin-top: 4px; }
+
+  /* Validation card */
+  .val-card {
+    background: #fffbeb; border: 1px solid #fcd34d; border-radius: 12px;
+    padding: 16px 20px; margin: 12px 0;
+  }
 
   /* Cost badge */
   .cost-badge {
@@ -97,20 +142,20 @@ st.markdown("""
 
   /* Section header */
   .section-hdr {
-    color: #6b7280; font-size: 11px; font-weight: 700; letter-spacing: .1em;
-    text-transform: uppercase; border-bottom: 1px solid #e2e5ed;
-    padding-bottom: 8px; margin: 28px 0 18px;
+    color: #9ca3af; font-size: 11px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; border-bottom: 2px solid #f3f4f6;
+    padding-bottom: 10px; margin: 32px 0 20px;
   }
 
   /* API chips */
   .profile-chip {
     display: inline-flex; align-items: center; gap: 6px;
-    background: #f8f9fc; border: 1px solid #e2e5ed; border-radius: 8px;
+    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
     padding: 6px 14px; font-size: 13px; color: #374151; margin: 4px;
     font-weight: 500;
   }
   .chip-green { background: #f0fdf4; border-color: #86efac; color: #15803d; }
-  .chip-red   { background: #fff5f5; border-color: #fca5a5; color: #dc2626; }
+  .chip-red   { background: #fef2f2; border-color: #fca5a5; color: #dc2626; }
 
   /* Dataframe + expanders */
   [data-testid="stDataFrame"] { background: #fff; border-radius: 10px; }
@@ -306,7 +351,7 @@ elif page == "generate":
     if not pl or not pl.get("active"):
         st.markdown("## ✍️ Nouveau contenu")
 
-        col_a, col_b, col_c = st.columns(3)
+        col_a, col_b, col_c, col_d = st.columns(4)
         with col_a:
             site_url = st.text_input("Site cible", placeholder="https://www.dogchef.com",
                                      key="gen_site_url")
@@ -318,6 +363,21 @@ elif page == "generate":
             country = st.text_input("Pays / marché cible",
                                     placeholder="Belgique",
                                     key="gen_country")
+        with col_d:
+            page_type = st.selectbox(
+                "Type de page",
+                options=[
+                    "Article de blog",
+                    "Page pilier",
+                    "Guide complet",
+                    "Landing page",
+                    "FAQ / Questions-réponses",
+                    "Page catégorie",
+                    "Comparatif",
+                    "Page produit",
+                ],
+                key="gen_page_type",
+            )
 
         opt1, opt2 = st.columns(2)
         with opt1:
@@ -328,6 +388,22 @@ elif page == "generate":
             )
         with opt2:
             refresh_style = st.checkbox("🔄 Forcer rebuild style profile", value=False)
+
+        doc_col, links_col = st.columns(2)
+        with doc_col:
+            context_file = st.file_uploader(
+                "Document de contexte (optionnel) — PDF, Word ou texte",
+                type=["pdf", "docx", "txt"],
+                key="gen_context_file",
+                help="Brief existant, fiche produit, notes internes… son contenu sera injecté dans le briefing."
+            )
+        with links_col:
+            internal_links_file = st.file_uploader(
+                "Export Screaming Frog (optionnel) — CSV maillage interne",
+                type=["csv"],
+                key="gen_internal_links",
+                help="Export 'All Inlinks' de Screaming Frog pour générer des suggestions de maillage."
+            )
 
         if site_url and keyword:
             from tone_analyzer import profile_cache_exists
@@ -348,12 +424,40 @@ elif page == "generate":
         )
 
         if not (site_url and keyword and country):
-            st.caption("Remplis le site cible, le mot-clé et le pays cible pour continuer.")
+            st.caption("Remplis le site cible, le mot-clé et le pays pour continuer.")
 
         if launch and site_url and keyword and country:
             if not config.ANTHROPIC_API_KEY:
                 st.error("❌ `ANTHROPIC_API_KEY` manquante.")
                 st.stop()
+            # ── Parse uploaded documents ────────────────────────────────────────
+            context_text = ""
+            if context_file is not None:
+                try:
+                    fname = context_file.name.lower()
+                    if fname.endswith(".txt"):
+                        context_text = context_file.read().decode("utf-8", errors="ignore")
+                    elif fname.endswith(".pdf"):
+                        from pypdf import PdfReader
+                        reader = PdfReader(context_file)
+                        context_text = "\n".join(p.extract_text() or "" for p in reader.pages)
+                    elif fname.endswith(".docx"):
+                        from docx import Document as DocxDoc
+                        doc = DocxDoc(context_file)
+                        context_text = "\n".join(p.text for p in doc.paragraphs)
+                    context_text = context_text[:8000]  # cap at 8k chars
+                except Exception as exc:
+                    st.warning(f"⚠️ Impossible de lire le document : {exc}")
+
+            internal_links_data = None
+            if internal_links_file is not None:
+                try:
+                    import pandas as _pd
+                    internal_links_data = _pd.read_csv(internal_links_file, encoding="utf-8-sig",
+                                                       on_bad_lines="skip").head(5000).to_dict("records")
+                except Exception as exc:
+                    st.warning(f"⚠️ CSV maillage non lu : {exc}")
+
             st.session_state.pl = {
                 "active":        True,
                 "stopped":       False,
@@ -363,6 +467,9 @@ elif page == "generate":
                 "keyword":       keyword,
                 "site_url":      site_url,
                 "country":       country,
+                "page_type":     page_type,
+                "context_doc":   context_text,
+                "internal_links_data": internal_links_data,
                 "refresh_style": refresh_style,
                 # outputs
                 "style_ctx":     None,
@@ -380,6 +487,7 @@ elif page == "generate":
                 "meta_title":       "",
                 "meta_description": "",
                 "geo_check":        [],
+                "internal_link_suggestions": [],
                 "system_prompt":    None,
                 # stepper display
                 "states":        ["pending"] * 5,
@@ -504,6 +612,41 @@ elif page == "generate":
                     pl["active"]  = False
                     st.rerun()
 
+            # ── Revenir à une étape ─────────────────────────────────────────
+            if step_done > 0:
+                with st.expander("🔄 Revenir à une étape précédente et régénérer"):
+                    redo_idx = st.selectbox(
+                        "Étape à régénérer",
+                        options=list(range(step_done + 1)),
+                        format_func=lambda i: f"{i+1}. {STEPS[i][2]}",
+                        key=f"redo_sel_{step_done}",
+                    )
+                    st.caption("Les étapes suivantes seront effacées et régénérées.")
+                    if st.button("🔄 Régénérer à partir de cette étape",
+                                 key=f"redo_btn_{step_done}"):
+                        # Clear outputs from redo_idx onwards
+                        _clear = {
+                            0: ["style_ctx", "style_profile", "system_prompt"],
+                            1: ["seo_brief", "intel_paa", "intel_secondary", "intel_lsi",
+                                "intel_longtail", "intel_cannib", "intel_intent", "intel_serp_titles"],
+                            2: ["briefing"],
+                            3: ["full_article"],
+                            4: ["meta_title", "meta_description", "geo_check",
+                                "internal_link_suggestions"],
+                        }
+                        for i in range(redo_idx, 5):
+                            pl["states"][i]    = "pending"
+                            pl["details"][i]   = ""
+                            pl["step_costs"][i] = 0.0
+                            for field in _clear.get(i, []):
+                                pl[field] = None if pl.get(field) and not isinstance(
+                                    pl.get(field), list) else [] if isinstance(
+                                    pl.get(field), list) else ""
+                        pl["step"]    = redo_idx
+                        pl["waiting"] = False
+                        pl["stopped"] = False
+                        st.rerun()
+
         # ── Arrêt demandé ────────────────────────────────────────────────────
         if pl["stopped"]:
             st.warning("⛔ Génération arrêtée à l'étape **" +
@@ -603,11 +746,15 @@ elif page == "generate":
                         system = pl["system_prompt"]
 
                         if s == 2:  # Briefing & plan
+                            ctx = pl.get("context_doc") or ""
+                            ctx_block = f"Contenu du document fourni :\n{ctx}" if ctx else "(aucun document fourni)"
                             prompt = BRIEFING_PROMPT.format(
-                                keyword  = pl["keyword"],
-                                site_url = pl["site_url"],
-                                country  = pl["country"],
-                                seo_brief= pl["seo_brief"] or "(aucune donnée SEO disponible)",
+                                keyword     = pl["keyword"],
+                                site_url    = pl["site_url"],
+                                country     = pl["country"],
+                                page_type   = pl.get("page_type", "Article de blog"),
+                                context_doc = ctx_block,
+                                seo_brief   = pl["seo_brief"] or "(aucune donnée SEO disponible)",
                             )
                             text, in_t, out_t = _call_claude(system, prompt, max_tokens=4000)
                             pl["briefing"] = text
@@ -738,6 +885,55 @@ elif page == "generate":
             with open(f"{base}.json", "w", encoding="utf-8") as f:
                 f.write(json_content)
 
+            # HTML export
+            try:
+                import markdown as _md_lib
+                html_body = _md_lib.markdown(
+                    pl["full_article"] or "",
+                    extensions=["tables", "fenced_code", "nl2br"],
+                )
+            except Exception:
+                import html as _html_mod
+                html_body = "<pre>" + _html_mod.escape(pl["full_article"] or "") + "</pre>"
+            html_content = f"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<title>{pl['meta_title'] or pl['keyword']}</title>
+<meta name="description" content="{pl['meta_description']}">
+<style>
+  body {{ font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; color: #1a1d2e; line-height: 1.7; }}
+  h1,h2,h3 {{ color: #1a1d2e; }} h1 {{ font-size: 2em; }} h2 {{ font-size: 1.4em; }}
+  p {{ margin: 0 0 1em; }} ul,ol {{ padding-left: 1.4em; }} a {{ color: #3b82f6; }}
+</style></head><body>
+{html_body}
+</body></html>"""
+            with open(f"{base}.html", "w", encoding="utf-8") as f:
+                f.write(html_content)
+
+            # Internal link suggestions
+            internal_links_data = pl.get("internal_links_data")
+            if internal_links_data and pl["full_article"]:
+                try:
+                    article_lower = pl["full_article"].lower()
+                    suggestions = []
+                    seen_urls: set = set()
+                    for row in internal_links_data:
+                        dest = str(row.get("To") or row.get("destination") or "")
+                        anchor = str(row.get("Anchor") or row.get("anchor") or "")
+                        title = str(row.get("Title") or row.get("title") or "")
+                        if dest in seen_urls or not dest.startswith("http"):
+                            continue
+                        # Simple relevance: anchor or title words appear in article
+                        score = sum(1 for w in (anchor + " " + title).lower().split()
+                                   if len(w) > 4 and w in article_lower)
+                        if score >= 2:
+                            suggestions.append({"url": dest, "anchor": anchor,
+                                               "title": title, "score": score})
+                            seen_urls.add(dest)
+                    suggestions.sort(key=lambda x: x["score"], reverse=True)
+                    pl["internal_link_suggestions"] = suggestions[:10]
+                except Exception:
+                    pass
+
             pl["active"] = False
             st.success(f"✅ Article enregistré — {bundle['word_count']} mots · Coût réel : {format_usd(article.cost.total_usd)}")
 
@@ -748,25 +944,43 @@ elif page == "generate":
             r3.markdown(_kpi("Tokens in", f"{article.cost.total_input_tokens:,}"), unsafe_allow_html=True)
             r4.markdown(_kpi("Tokens out", f"{article.cost.total_output_tokens:,}"), unsafe_allow_html=True)
 
-            st.markdown(f"**🏷️ Meta title :** {pl['meta_title']}")
-            st.markdown(f"**📝 Meta description :** {pl['meta_description']}")
+            st.markdown(f"**Meta title :** {pl['meta_title']}")
+            st.markdown(f"**Meta description :** {pl['meta_description']}")
 
             if pl["intel_cannib"]:
                 st.warning(f"⚠️ {len(pl['intel_cannib'])} risque(s) de cannibalisation")
                 for url in pl["intel_cannib"]:
                     st.caption(f"• {url}")
 
-            with st.expander("� Briefing éditorial", expanded=False):
-                st.markdown(pl["briefing"] or "")
-            with st.expander("📄 Article complet", expanded=True):
-                st.markdown(pl["full_article"])
+            # Internal link suggestions block
+            if pl.get("internal_link_suggestions"):
+                with st.expander(f"🔗 Suggestions de maillage interne ({len(pl['internal_link_suggestions'])} liens)", expanded=True):
+                    for s in pl["internal_link_suggestions"]:
+                        st.markdown(
+                            f"**Ancre :** `{s['anchor']}`  \n"
+                            f"**URL :** [{s['url']}]({s['url']})  \n"
+                            f"**Titre page :** {s['title']}",
+                        )
+                        st.divider()
 
-            d1, d2, d3 = st.columns(3)
+            # Article tabs: preview / HTML
+            tab_prev, tab_html = st.tabs(["📄 Article (markdown)", "🌐 Code HTML (copier-coller)"])
+            with tab_prev:
+                with st.expander("Briefing éditorial", expanded=False):
+                    st.markdown(pl["briefing"] or "")
+                st.markdown(pl["full_article"])
+            with tab_html:
+                st.code(html_content, language="html")
+                st.caption("Copie ce code HTML et colle-le dans ton CMS.")
+
+            d1, d2, d3, d4 = st.columns(4)
             d1.download_button("⬇️ .md", md_content, f"{slug}_{ts}.md",
                                "text/markdown", use_container_width=True)
             d2.download_button("⬇️ .json", json_content, f"{slug}_{ts}.json",
                                "application/json", use_container_width=True)
-            if d3.button("✍️ Nouvelle génération", use_container_width=True):
+            d3.download_button("⬇️ .html", html_content, f"{slug}_{ts}.html",
+                               "text/html", use_container_width=True)
+            if d4.button("✍️ Nouvelle génération", use_container_width=True):
                 st.session_state.pl = None
                 st.rerun()
 

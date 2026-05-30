@@ -61,24 +61,35 @@ Chaque phrase doit apporter de la valeur.
 
 BRIEFING_PROMPT = """\
 Mot-clé cible : «{keyword}»
+Type de page : {page_type}
 Site destinataire : {site_url}
 Pays / marché cible : {country}
+
+--- INFORMATIONS DE CONTEXTE FOURNIES (si disponibles) ---
+{context_doc}
+---
 
 Ton rôle :
 1. Décris brièvement les activités de {site_url} (2-3 phrases) pour cadrer la demande.
 
-2. Les sources SERP locales ({country}) figurent dans les données SEO ci-dessous
-   (section « Sources SERP locales »). Utilise ces pages comme références principales
-   — elles sont réelles, issues du marché cible, et non générées.
+2. Analyse des concurrents dans les SERP locales ({country}) :
+   Pour chaque source SERP ci-dessous, identifie :
+   - Si la page est commerciale (vente, produit, landing) ou informationnelle (guide, blog)
+   - L'angle principal de la page
+   - Ce qu'elle couvre bien et ce qui manque
+   → Conclus par l'angle différenciant pour {site_url} qui n'est PAS couvert par ces concurrents
+
+3. Les sources SERP locales ({country}) figurent dans les données SEO ci-dessous.
+   Utilise-les comme références — elles sont réelles, issues du marché cible.
    Si la liste est vide, identifie toi-même 5 sources pertinentes.
 
-3. En t'appuyant sur ces sources, rédige :
+4. En t'appuyant sur ces sources et le contexte, rédige :
 
-   a. Un briefing complet comprenant :
+   a. Un briefing complet pour une page de type « {page_type} » comprenant :
       - Intention de recherche détectée et ses implications éditoriales
-      - Angle différenciant pour {site_url} par rapport aux pages qui rankent
+      - Angle différenciant (non couvert par les concurrents analysés)
       - Points clés incontournables à couvrir
-      - Recommandations de tonalité et de style
+      - Recommandations de tonalité et de style adaptées au type de page
       - Longueur cible : 1 200 à 1 800 mots
 
    b. Un plan de rédaction structuré H2 / H3 où chaque section précise

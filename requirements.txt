@@ -18,3 +18,10 @@ python-dotenv>=1.0.0
 
 # UI
 streamlit>=1.35.0
+
+# Output formats
+markdown>=3.5.0          # MD → HTML export
+
+# Document parsing (context upload)
+pypdf>=4.0.0
+python-docx>=1.1.0

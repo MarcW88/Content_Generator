@@ -171,6 +171,7 @@ def _parse_kw_items(items: list[dict], cluster: KeywordCluster,
                     seen: set[str], limit: int = 40) -> None:
     """
     Classify keyword items into secondary / lsi / long_tail based on search volume.
+    Handles both flat {search_volume} and nested {keyword_info: {search_volume}} formats.
     Modifies cluster in-place. `seen` prevents duplicates across calls.
     """
     count = 0
@@ -178,7 +179,11 @@ def _parse_kw_items(items: list[dict], cluster: KeywordCluster,
         if count >= limit:
             break
         kw  = (item.get("keyword") or "").strip()
-        vol = item.get("search_volume") or 0
+        # keywords_for_keywords wraps volume inside keyword_info
+        kw_info = item.get("keyword_info") or {}
+        vol = (kw_info.get("search_volume")
+               or item.get("search_volume")
+               or 0)
         if not kw or kw.lower() == cluster.primary.lower() or kw in seen:
             continue
         seen.add(kw)

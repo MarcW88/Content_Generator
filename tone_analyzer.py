@@ -153,13 +153,15 @@ def _discover_page_urls(site_url: str, count: int) -> list[str]:
 
 # ── Style Profile extractor ───────────────────────────────────────────────────
 
-TONE_SYSTEM_PROMPT = """Tu es un expert en analyse linguistique et éditoriale.
-Tu reçois un corpus de textes extraits d'un site web.
-Ta mission : produire un Style Profile JSON précis et actionnable qui permettra
-à un autre LLM de reproduire fidèlement le ton éditorial de ce site.
+TONE_SYSTEM_PROMPT = """You are an expert editorial linguist. You receive a corpus of texts scraped from a website.
+Your task: produce a precise, actionable Style Profile JSON that will allow another LLM to faithfully
+reproduce the editorial tone of this site.
 
-Retourne UNIQUEMENT un objet JSON valide, sans markdown, sans commentaires.
-Schema attendu (respecte exactement ces clés) :
+IMPORTANT: Detect the dominant language of the corpus (French / Dutch / English) and write ALL string
+values in that same language. Do NOT mix languages in the JSON values.
+
+Return ONLY a valid JSON object, no markdown, no comments.
+Expected schema (respect these exact keys) :
 {
   "tonality": [],
   "avg_sentence_length": "",
@@ -170,7 +172,8 @@ Schema attendu (respecte exactement ces clés) :
   "structural_patterns": [],
   "pov": "",
   "cta_style": "",
-  "forbidden": []
+  "forbidden": [],
+  "detected_language": ""
 }"""
 
 
@@ -186,7 +189,8 @@ def extract_style_profile(corpus: str) -> tuple[dict, int, int]:
             {
                 "role": "user",
                 "content": (
-                    "Voici le corpus de textes du site. Analyse et retourne le Style Profile JSON.\n\n"
+                    "Here is the corpus of texts from the website. "
+                    "Detect the language and produce the Style Profile JSON in that language.\n\n"
                     f"---CORPUS---\n{corpus}"
                 ),
             }
