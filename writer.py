@@ -273,51 +273,26 @@ Voici le résumé du briefing établi précédemment :
 {context_summary}
 
 Ton rôle :
-En t'appuyant sur ce contexte, rédige le plan de rédaction structuré.
+En t'appuyant sur ce contexte, rédige un plan de rédaction structuré et complet.
 
 À générer (en markdown, section ## Plan de Rédaction) :
 Plan de rédaction structuré H2 / H3 où chaque section précise
 l'intention de recherche spécifique à laquelle elle répond
 (ex. : « — intention : comprendre le coût »)
 
+Structure flexible :
+- Adapte le plan au sujet et à l'intention de recherche
+- Inclue les sections pertinentes selon le contexte (pas de structure imposée)
+- Le plan doit être complet et couvrir tous les aspects nécessaires
+- Pas de CTA final dans le plan
+
 Règles absolues :
 - Pas d'emoji dans le texte
 - Pas de majuscule à chaque mot des titres
 - Phrases naturelles et fluides
+- Le plan doit être généré en une seule fois (complet)
 
 Retourne UNIQUEMENT la section ## Plan de Rédaction complète.
-"""
-
-BRIEFING_PART2_PLAN_CONTINUATION = """\
-Voici le résumé du briefing établi précédemment :
-
-{context_summary}
-
-Sections H2 déjà générées dans le plan (NE PAS REPRENDRE) :
-{existing_sections}
-
-Ton rôle :
-Continue le plan de rédaction en ajoutant 3-4 nouvelles sections H2/H3 après celles déjà écrites.
-
-INSTRUCTIONS STRICTES :
-- Le plan final doit contenir 10-12 sections H2 maximum
-- NE JAMAIS répéter les sections H2 déjà listées ci-dessus
-- NE JAMAIS créer de nouvelle Introduction, Conclusion, FAQ ou Glossaire si elles existent déjà
-- Génère UNIQUEMENT 3-4 nouvelles sections H2/H3 logiques
-- Chaque section doit préciser l'intention de recherche (ex: « — intention : comprendre le coût »)
-
-À générer (en markdown) :
-Ajoute 3-4 nouvelles sections H2/H3 logiques après celles déjà écrites.
-Format : ## Titre H2\nIntention : ...\n\n### Titre H3\nIntention : ...
-
-Règles absolues :
-- Pas d'emoji dans le texte
-- Pas de majuscule à chaque mot des titres
-- Phrases naturelles et fluides
-- NE JAMAIS répéter les headers déjà écrits
-- NE JAMAIS générer de nouvelles sections si elles existent déjà
-
-Retourne UNIQUEMENT les nouvelles sections (sans header ## Plan de Rédaction).
 """
 
 BRIEFING_PART2_TONALITY = """\
@@ -497,47 +472,13 @@ def generate_chunked_briefing(
     # Summary for next call
     summary2a = _build_context_summary(part1 + "\n\n" + part2a, max_words=120)
 
-    # Part 2b: Plan de Rédaction (3 mandatory calls, 6000 tokens total)
-    part2b_parts = []
-    seen_headers = set()
-    existing_h2_sections = []
-    for i in range(3):
-        logger.info("[ChunkedBriefing] Part 2b.%d — Plan de Rédaction", i + 1)
-        if i == 0:
-            p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
-        else:
-            # Extract H2 headers from previous content
-            import re
-            h2_matches = re.findall(r'^##\s+(.+)$', "\n\n".join(part2b_parts), re.MULTILINE)
-            existing_h2_sections = h2_matches
-            p2b = BRIEFING_PART2_PLAN_CONTINUATION.format(
-                context_summary=summary2a,
-                existing_sections="\n".join(f"- {h2}" for h2 in existing_h2_sections)
-            )
-        part2b_chunk, in2b, out2b = _call_claude(system, p2b, max_tokens=2000)
-        # Post-process: remove duplicate headers
-        if i > 0:
-            import re
-            lines = part2b_chunk.split('\n')
-            filtered_lines = []
-            for line in lines:
-                header_match = re.match(r'^(#{2,3})\s+(.+)$', line)
-                if header_match:
-                    header_text = header_match.group(2).strip().lower()
-                    if header_text in seen_headers:
-                        continue
-                    seen_headers.add(header_text)
-                filtered_lines.append(line)
-            part2b_chunk = '\n'.join(filtered_lines)
-        else:
-            import re
-            for match in re.finditer(r'^(#{2,3})\s+(.+)$', part2b_chunk, re.MULTILINE):
-                seen_headers.add(match.group(2).strip().lower())
-        part2b_parts.append(part2b_chunk)
-        total_in += in2b
-        total_out += out2b
-    part2b = "\n\n".join(part2b_parts)
+    # Part 2b: Plan de Rédaction (single call, 4000 tokens for flexibility)
+    logger.info("[ChunkedBriefing] Part 2b — Plan de Rédaction")
+    p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
+    part2b, in2b, out2b = _call_claude(system, p2b, max_tokens=4000)
     parts.append(part2b)
+    total_in += in2b
+    total_out += out2b
 
     # Summary for next call
     summary2b = _build_context_summary(part1 + "\n\n" + part2a + "\n\n" + part2b, max_words=150)
