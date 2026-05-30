@@ -87,60 +87,112 @@ def scrape_page(url: str) -> str:
     return _scrape_with_bs4(url)[: config.SCRAPE_MAX_CHARS]
 
 
+def _parse_sitemap_locs(xml_text: str) -> list[str]:
+    """Extract all <loc> values from a sitemap or sitemap index."""
+    try:
+        soup = BeautifulSoup(xml_text, "lxml-xml")
+    except Exception:
+        soup = BeautifulSoup(xml_text, "html.parser")
+    return [t.text.strip() for t in soup.find_all("loc") if t.text.strip()]
+
+
+def _fetch_sitemap_urls(base: str) -> list[str]:
+    """Try robots.txt, common sitemap paths, and sitemap indexes to collect page URLs."""
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; ContentAgent/1.0)"}
+    sitemap_urls: list[str] = []
+
+    # 1. robots.txt → Sitemap: directives
+    try:
+        r = requests.get(base + "/robots.txt", timeout=10, headers=headers)
+        if r.ok:
+            for line in r.text.splitlines():
+                if line.lower().startswith("sitemap:"):
+                    sm = line.split(":", 1)[1].strip()
+                    if sm not in sitemap_urls:
+                        sitemap_urls.append(sm)
+    except Exception:
+        pass
+
+    # 2. Common sitemap candidates
+    for path in ["/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml",
+                 "/post-sitemap.xml", "/page-sitemap.xml", "/blog-sitemap.xml"]:
+        candidate = base + path
+        if candidate not in sitemap_urls:
+            sitemap_urls.append(candidate)
+
+    page_urls: list[str] = []
+    for sm_url in sitemap_urls:
+        try:
+            r = requests.get(sm_url, timeout=12, headers=headers)
+            if not r.ok or "<loc>" not in r.text:
+                continue
+            locs = _parse_sitemap_locs(r.text)
+            # Sitemap index → recurse one level
+            if "<sitemapindex" in r.text.lower() or "<sitemap>" in r.text.lower():
+                for child_sm in locs[:8]:
+                    try:
+                        cr = requests.get(child_sm, timeout=12, headers=headers)
+                        if cr.ok and "<loc>" in cr.text:
+                            page_urls.extend(_parse_sitemap_locs(cr.text))
+                    except Exception:
+                        pass
+            else:
+                page_urls.extend(locs)
+            if page_urls:
+                logger.info("Sitemap %s — %d URLs", sm_url, len(page_urls))
+                break
+        except Exception as exc:
+            logger.debug("Sitemap %s failed: %s", sm_url, exc)
+
+    return page_urls
+
+
 def _discover_page_urls(site_url: str, count: int) -> list[str]:
     """
-    Quick sitemap-based discovery. Falls back to crawling the homepage.
-    Always includes site_url itself as a last resort.
+    Discover content pages to scrape.
+    Priority: sitemap > robots.txt sitemap > homepage links > common paths.
+    Always includes site_url itself.
     """
     urls: list[str] = []
     base = site_url.rstrip("/")
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; ContentAgent/1.0)"}
 
-    # 1. Try sitemap
-    sitemap_candidates = [
-        base + "/sitemap.xml",
-        base + "/sitemap_index.xml",
-    ]
-    for sitemap_url in sitemap_candidates:
-        try:
-            resp = requests.get(sitemap_url, timeout=15,
-                                headers={"User-Agent": "Mozilla/5.0"})
-            if resp.ok and "<loc>" in resp.text:
-                # Use html.parser as xml fallback in case lxml-xml is unavailable
-                try:
-                    soup = BeautifulSoup(resp.text, "lxml-xml")
-                except Exception:
-                    soup = BeautifulSoup(resp.text, "html.parser")
-                locs = [t.text.strip() for t in soup.find_all("loc")]
-                preferred = [u for u in locs
-                             if any(k in u for k in ["/blog", "/article", "/guide", "/conseil", "/actualite"])]
-                urls = preferred if preferred else locs
-                logger.info("Sitemap OK — %d URLs found", len(urls))
-                break
-        except Exception as exc:
-            logger.warning("Sitemap %s failed: %s", sitemap_url, exc)
+    # 1. Sitemap-based discovery
+    sitemap_urls = _fetch_sitemap_urls(base)
+    content_kws = ["/blog", "/article", "/guide", "/conseil", "/actualit",
+                   "/recette", "/ingredient", "/race", "/sante", "/nutrition",
+                   "/nieuws", "/advies", "/gezond", "/voeding", "/post"]
+    preferred = [u for u in sitemap_urls
+                 if any(k in u.lower() for k in content_kws)]
+    urls = preferred if len(preferred) >= 3 else sitemap_urls
 
-    # 2. Fallback: parse homepage links
-    if not urls:
+    # 2. Fallback: parse homepage <a> links
+    if len(urls) < count:
         try:
-            resp = requests.get(site_url, timeout=15,
-                                headers={"User-Agent": "Mozilla/5.0"})
+            resp = requests.get(site_url, timeout=15, headers=headers)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
             for a in soup.find_all("a", href=True):
                 href = a["href"]
                 if href.startswith("/") and len(href) > 1:
                     urls.append(base + href)
-                elif href.startswith(base) and href != base:
+                elif href.startswith(base) and href != base + "/":
                     urls.append(href)
-            logger.info("Homepage crawl — %d links found", len(urls))
+            logger.info("Homepage crawl — %d extra links", len(urls))
         except Exception as exc:
             logger.warning("Homepage crawl failed: %s", exc)
 
-    # 3. Always include the base URL itself as a last resort
+    # 3. Common content paths as last resort
+    if len(urls) < count:
+        for path in ["/blog", "/blog/", "/articles", "/guides", "/recettes",
+                     "/nieuws", "/advies", "/about", "/a-propos"]:
+            urls.append(base + path)
+
+    # 4. Always include homepage
     if site_url not in urls:
         urls.insert(0, site_url)
 
-    # deduplicate + limit
+    # deduplicate + filter to same domain + limit
     seen, result = set(), []
     for u in urls:
         if u not in seen:

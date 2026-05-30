@@ -38,7 +38,7 @@ CLAUDE_SONNET = "claude-sonnet-4-5"
 CLAUDE_OPUS   = "claude-opus-4-5"
 
 # ── Scraping ───────────────────────────────────────────────────────────────────
-SCRAPE_PAGES_COUNT = 8
+SCRAPE_PAGES_COUNT = 12
 SCRAPE_MAX_CHARS   = 6_000
 
 # ── SEO ────────────────────────────────────────────────────────────────────────
