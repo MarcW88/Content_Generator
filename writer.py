@@ -501,7 +501,7 @@ def generate_chunked_briefing(
     total_out += out3a
 
     # Summary for next call
-    summary3a = _build_context_summary(part1 + "\n\n" + part2 + "\n\n" + part3a, max_words=150)
+    summary3a = _build_context_summary(part1 + "\n\n" + part2a + "\n\n" + part2b + "\n\n" + part2c + "\n\n" + part3a, max_words=150)
 
     # Part 3b: SEO Metas
     logger.info("[ChunkedBriefing] Part 3b — SEO Metas")
@@ -515,7 +515,7 @@ def generate_chunked_briefing(
     total_out += out3b
 
     # Summary for next call
-    summary3b = _build_context_summary(part1 + "\n\n" + part2 + "\n\n" + part3a + "\n\n" + part3b, max_words=180)
+    summary3b = _build_context_summary(part1 + "\n\n" + part2a + "\n\n" + part2b + "\n\n" + part2c + "\n\n" + part3a + "\n\n" + part3b, max_words=180)
 
     # Part 3c: FAQ & Technique
     logger.info("[ChunkedBriefing] Part 3c — FAQ & Technique")
