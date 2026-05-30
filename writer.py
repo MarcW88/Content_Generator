@@ -57,82 +57,80 @@ Chaque phrase doit apporter de la valeur.
 """
 
 
-# ── Pass 1 : Introduction ──────────────────────────────────────────────────────
+# ── Passe Briefing ─────────────────────────────────────────────────────────────
 
-PASS1_PROMPT = """Rédige l'introduction de l'article pour le mot-clé : **{keyword}**
+BRIEFING_PROMPT = """\
+Mot-clé cible : «{keyword}»
+Site destinataire : {site_url}
+Pays / marché cible : {country}
 
-Contraintes :
-- 100 à 150 mots maximum
-- Commence par une accroche forte (question, statistique ou affirmation contre-intuitive)
-- Pose le problème du lecteur en 1-2 phrases
-- Annonce ce que l'article va apporter (sans spoiler les H2)
-- Intègre le mot-clé principal de manière naturelle dans les 50 premiers mots
-- Respecte scrupuleusement le Style Profile
+Ton rôle :
+1. Décris brièvement les activités de {site_url} (2-3 phrases) pour cadrer la demande.
+2. Identifie toi-même 5 articles de référence pertinents sur ce sujet (issus de ta base \
+d'entraînement — indique auteur, titre, publication et année si possible).
+3. En t'appuyant sur ces 5 sources, rédige :
 
-Ne rédige QUE l'introduction, rien d'autre.
+   a. Un briefing complet comprenant :
+      - Angle éditorial différenciant pour {site_url}
+      - Points clés incontournables à couvrir
+      - Angle vis-à-vis des concurrents
+      - Recommandations de tonalité et de style
+      - Longueur cible : 1 200 à 1 800 mots
+
+   b. Un plan de rédaction structuré H2 / H3 avec une description d'une ligne par section
+
+Données SEO disponibles (contexte — ne pas en faire la seule base) :
+{seo_brief}
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres (seule la première lettre est en majuscule)
+- Phrases naturelles et fluides, sans forcer le mot-clé exact
+- Langue : français, néerlandais ou anglais selon la langue dominante du site
+- Liste les 5 sources utilisées à la fin du briefing (usage interne uniquement,
+  elles ne seront pas citées dans l'article)
 """
 
 
-# ── Pass 2 : Plan H2/H3 ────────────────────────────────────────────────────────
+# ── Passe Article ──────────────────────────────────────────────────────────────
 
-PASS2_PROMPT = """Sur la base de l'introduction ci-dessous et du SEO Brief, génère le plan H2/H3 de l'article.
+ARTICLE_PROMPT = """\
+Voici le briefing validé à suivre EXACTEMENT :
 
-## Introduction rédigée (passe 1)
-{pass1_output}
+---BRIEFING---
+{briefing}
+---FIN BRIEFING---
 
-Contraintes du plan :
-- 4 à 6 H2 maximum
-- Chaque H2 peut avoir 2-3 H3
-- Les H2 doivent couvrir les questions PAA prioritaires
-- Les H2 doivent intégrer naturellement les mots-clés secondaires
-- Format attendu :
-  ## H2 : [titre]
-    ### H3 : [sous-titre]
-    ### H3 : [sous-titre]
-  ## H2 : [titre]
-  ...
-- Respecte les patterns structurels du Style Profile
+Ta mission : rédiger l'article complet sur le mot-clé «{keyword}» en respectant
+scrupuleusement ce briefing, le plan H2/H3 inclus.
 
-Retourne UNIQUEMENT le plan formaté, sans commentaire.
+Avant de commencer, répète les 5 sources de référence mentionnées dans le briefing
+(pour confirmer que tu utilises les bonnes), puis rédige l'article.
+
+Tu peux t'inspirer de ces sources mais ne les cite PAS dans l'article final.
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot
+- Phrases naturelles et fluides, sans sur-optimisation du mot-clé
+- Suis le plan H2/H3 du briefing à la lettre
+- Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
 """
 
 
-# ── Pass 3 : Body ─────────────────────────────────────────────────────────────
+# ── Passe Méta + Révision ──────────────────────────────────────────────────────
 
-PASS3_PROMPT = """Rédige le corps complet de l'article en suivant le plan ci-dessous, section par section.
+META_PROMPT = """\
+Tu reçois l'article complet ci-dessous. Effectue la révision finale.
 
-## Introduction (passe 1)
-{pass1_output}
-
-## Plan validé (passe 2)
-{pass2_output}
-
-Contraintes de rédaction :
-- Objectif global : {target_word_count} mots pour tout l'article (intro incluse)
-- Rédige chaque section sous son H2/H3 correspondant
-- Pour chaque H2 : 150 à 250 mots
-- Intègre les mots-clés secondaires naturellement (pas de keyword stuffing)
-- Adresse au moins 3 questions PAA du SEO Brief dans le corps
-- Utilise des listes à puces pour les étapes ou comparaisons (max 5 items)
-- Ajoute un mini-CTA discret à la fin de 2 sections maximum
-- Respecte STRICTEMENT le Style Profile (ton, vocabulaire, POV, phrases interdites)
-
-Retourne le corps de l'article (H2 + H3 + contenu), sans l'introduction.
-"""
-
-
-# ── Pass 4 : Méta + Révision ──────────────────────────────────────────────────
-
-PASS4_PROMPT = """Tu reçois l'article complet (introduction + corps). Effectue la révision finale.
-
-## Article complet
-{full_draft}
+## Article
+{full_article}
 
 Tâches :
-1. **Méta-title** : 50-60 caractères, mot-clé principal en début, accrocheur
-2. **Méta-description** : 140-160 caractères, bénéfice clair, verbe d'action
-3. **Révision** : corrige les incohérences de ton, supprime les répétitions, renforce les transitions
-4. **CTA final** : 1 CTA de fin d'article aligné avec le style CTA du Style Profile
+1. Méta-title : 50-60 caractères, mot-clé principal en début, accrocheur, pas de majuscule à chaque mot
+2. Méta-description : 140-160 caractères, bénéfice clair, verbe d'action
+3. Révision légère : corrige les incohérences de ton, supprime les répétitions, renforce les transitions
+4. CTA final : 1 CTA de fin d'article aligné avec le style du site
 
 Retourne en JSON strictement valide :
 {{
@@ -146,12 +144,13 @@ Retourne en JSON strictement valide :
 
 # ── Claude caller ──────────────────────────────────────────────────────────────
 
-def _call_claude(system: str, user_prompt: str) -> tuple[str, int, int]:
+def _call_claude(system: str, user_prompt: str,
+                 max_tokens: int | None = None) -> tuple[str, int, int]:
     """Single Claude Sonnet call. Returns (text, input_tokens, output_tokens)."""
     client  = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     message = client.messages.create(
         model      = config.CLAUDE_SONNET,
-        max_tokens = config.MAX_TOKENS_PER_PASS,
+        max_tokens = max_tokens or config.MAX_TOKENS_PER_PASS,
         system     = system,
         messages   = [{"role": "user", "content": user_prompt}],
     )
@@ -170,7 +169,7 @@ def run_writing_pipeline(
     seo_brief: str,
 ) -> ArticleOutput:
     """
-    Execute the full 4-pass writing pipeline.
+    Legacy 4-pass pipeline (kept for reference).
     Returns a populated ArticleOutput.
     """
     output = ArticleOutput(keyword=keyword)

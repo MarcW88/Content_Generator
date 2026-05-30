@@ -250,6 +250,9 @@ def build_style_profile(
     corpus          = "\n\n".join(pages_text)[:40_000]
     profile, in_t, out_t = extract_style_profile(corpus)
 
+    profile["_pages_scraped"] = urls[:len(pages_text)]
+    profile["_scraped_count"] = len(pages_text)
+
     with open(cache, "w") as f:
         json.dump(profile, f, ensure_ascii=False, indent=2)
     logger.info("Style profile saved to %s", cache)

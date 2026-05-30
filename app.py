@@ -268,14 +268,13 @@ elif page == "generate":
     pl = st.session_state.pl
 
     STEPS = [
-        ("Style",   "🎨", "Analyse du ton éditorial"),
-        ("SEO",     "📊", "Données SERP / PAA"),
-        ("Passe 1", "✏️",  "Introduction"),
-        ("Passe 2", "🗂️",  "Plan H2/H3"),
-        ("Passe 3", "📝", "Corps de l'article"),
-        ("Passe 4", "🔍", "Méta + Révision"),
+        ("Style",    "🎨", "Analyse du ton éditorial"),
+        ("SEO",      "📊", "Données SERP / PAA"),
+        ("Briefing", "📋", "Briefing & plan de rédaction"),
+        ("Article",  "✏️",  "Rédaction de l'article"),
+        ("Métas",    "🔍", "Métas + révision finale"),
     ]
-    PROGRESS = [5, 16, 35, 55, 72, 88]
+    PROGRESS = [5, 22, 45, 72, 90]
 
     def _stepper_html(states, details, step_costs):
         icon_map = {"pending": "○", "running": "◉", "done": "✓", "error": "✗",
@@ -307,21 +306,25 @@ elif page == "generate":
     if not pl or not pl.get("active"):
         st.markdown("## ✍️ Nouveau contenu")
 
-        col_a, col_b = st.columns(2)
+        col_a, col_b, col_c = st.columns(3)
         with col_a:
-            site_url = st.text_input("Site cible", placeholder="https://www.monsite.com",
+            site_url = st.text_input("Site cible", placeholder="https://www.dogchef.com",
                                      key="gen_site_url")
         with col_b:
             keyword = st.text_input("Mot-clé principal",
-                                    placeholder="rénovation cuisine Bruxelles",
+                                    placeholder="croquettes sans céréales chien",
                                     key="gen_keyword")
+        with col_c:
+            country = st.text_input("Pays / marché cible",
+                                    placeholder="Belgique",
+                                    key="gen_country")
 
         opt1, opt2 = st.columns(2)
         with opt1:
             manual = st.checkbox(
                 "✋ Validation manuelle entre chaque étape",
                 value=True,
-                help="Si coché, l'agent s'arrête après chaque étape pour que tu puisses relire et valider avant de continuer.",
+                help="Si coché, l'agent s'arrête après chaque étape pour relire et valider.",
             )
         with opt2:
             refresh_style = st.checkbox("🔄 Forcer rebuild style profile", value=False)
@@ -341,24 +344,25 @@ elif page == "generate":
         launch = st.button(
             "⚡ Lancer la génération",
             type="primary",
-            disabled=not bool(site_url and keyword),
+            disabled=not bool(site_url and keyword and country),
         )
 
-        if not (site_url and keyword):
-            st.caption("Remplis le site cible et le mot-clé pour continuer.")
+        if not (site_url and keyword and country):
+            st.caption("Remplis le site cible, le mot-clé et le pays cible pour continuer.")
 
-        if launch and site_url and keyword:
+        if launch and site_url and keyword and country:
             if not config.ANTHROPIC_API_KEY:
                 st.error("❌ `ANTHROPIC_API_KEY` manquante.")
                 st.stop()
             st.session_state.pl = {
                 "active":        True,
                 "stopped":       False,
-                "waiting":       False,  # en attente de validation manuelle
+                "waiting":       False,
                 "manual":        manual,
-                "step":          0,      # 0-5 = étape courante, 6 = terminé
+                "step":          0,      # 0-4 = étape courante, 5 = terminé
                 "keyword":       keyword,
                 "site_url":      site_url,
+                "country":       country,
                 "refresh_style": refresh_style,
                 # outputs
                 "style_ctx":     None,
@@ -367,20 +371,17 @@ elif page == "generate":
                 "intel_paa":     [],
                 "intel_secondary": [],
                 "intel_cannib":  [],
-                "introduction":  None,
-                "plan":          None,
-                "body":          None,
+                "briefing":      None,
                 "full_article":  None,
                 "meta_title":    "",
                 "meta_description": "",
                 "system_prompt": None,
                 # stepper display
-                "states":        ["pending"] * 6,
-                "details":       [""] * 6,
-                "step_costs":    [0.0] * 6,
+                "states":        ["pending"] * 5,
+                "details":       [""] * 5,
+                "step_costs":    [0.0] * 5,
                 "total_cost":    0.0,
-                # pass costs for final export
-                "pass_costs":    [],  # list of [model, in_t, out_t]
+                "pass_costs":    [],
             }
             st.rerun()
 
@@ -394,7 +395,7 @@ elif page == "generate":
         cost_ph      = st.empty()
         stepper_ph.markdown(_stepper_html(pl["states"], pl["details"], pl["step_costs"]),
                             unsafe_allow_html=True)
-        progress_ph.progress(PROGRESS[min(pl["step"], 5)] if pl["step"] < 6 else 100)
+        progress_ph.progress(PROGRESS[min(pl["step"], 4)] if pl["step"] < 5 else 100)
         cost_ph.markdown(
             f'<div style="text-align:right;margin:-4px 0 16px">'
             f'<span class="cost-badge">💰 Coût en cours : {format_usd(pl["total_cost"])}</span>'
@@ -421,30 +422,39 @@ elif page == "generate":
             # Aperçu selon l'étape terminée
             if step_done == 0 and pl["style_profile"]:
                 p = pl["style_profile"]
+                pages = p.get("_pages_scraped", [])
+                scraped_n = p.get("_scraped_count", 0)
+                if pages:
+                    st.success(f"✅ {scraped_n} page(s) analysée(s) pour construire le style profile")
+                    with st.expander(f"Pages scrapées ({scraped_n})"):
+                        for u in pages:
+                            st.caption(f"• {u}")
                 c1, c2 = st.columns(2)
                 c1.markdown("**Tonalité :** " + ", ".join(p.get("tonality", [])))
                 c1.markdown("**POV :** " + p.get("pov", "—"))
                 c2.markdown("**Patterns :** " + ", ".join(p.get("recurring_patterns", [])[:4]))
                 c2.markdown("**Vocab. évité :** " + ", ".join(p.get("avoided_vocabulary", [])[:4]))
                 with st.expander("Voir le style profile complet"):
-                    st.json(p)
+                    st.json({k: v for k, v in p.items() if not k.startswith("_")})
             elif step_done == 1:
                 if pl["intel_paa"]:
-                    st.markdown("**Questions PAA extraites :**")
+                    st.markdown("**Questions PAA (contexte SEO) :**")
                     for q in pl["intel_paa"][:6]:
                         st.caption(f"• {q}")
+                    st.caption("Ces questions serviront de contexte au briefing — pas comme seule base.")
                 if pl["intel_cannib"]:
                     st.warning(f"⚠️ {len(pl['intel_cannib'])} risque(s) cannibalisation")
-            elif step_done == 2 and pl["introduction"]:
-                with st.expander("Lire l'introduction", expanded=True):
-                    st.markdown(pl["introduction"])
-            elif step_done == 3 and pl["plan"]:
-                st.code(pl["plan"], language="markdown")
-            elif step_done == 4 and pl["body"]:
-                st.caption(f"{_count_words(pl['body'])} mots")
-                with st.expander("Lire le corps de l'article", expanded=False):
-                    st.markdown(pl["body"])
-            elif step_done == 5:
+            elif step_done == 2 and pl["briefing"]:
+                wc = _count_words(pl["briefing"])
+                st.caption(f"{wc} mots")
+                with st.expander("Lire le briefing & plan complet", expanded=True):
+                    st.markdown(pl["briefing"])
+            elif step_done == 3 and pl["full_article"]:
+                wc = _count_words(pl["full_article"])
+                st.caption(f"{wc} mots")
+                with st.expander("Lire l'article complet", expanded=False):
+                    st.markdown(pl["full_article"])
+            elif step_done == 4:
                 st.markdown(f"**🏷️ Meta title :** {pl['meta_title']}")
                 st.markdown(f"**📝 Meta description :** {pl['meta_description']}")
                 with st.expander("Article révisé complet", expanded=False):
@@ -452,7 +462,7 @@ elif page == "generate":
 
             # Boutons de décision
             st.markdown("")
-            next_label = "Enregistrer l'article ✅" if step_done == 5 \
+            next_label = "Enregistrer l'article ✅" if step_done == 4 \
                          else f"✅ Valider → {STEPS[step_done + 1][2]}"
             btn_ok, btn_stop = st.columns(2)
             with btn_ok:
@@ -470,7 +480,7 @@ elif page == "generate":
         # ── Arrêt demandé ────────────────────────────────────────────────────
         if pl["stopped"]:
             st.warning("⛔ Génération arrêtée à l'étape **" +
-                       STEPS[min(pl["step"], 5)][2] + "**.")
+                       STEPS[min(pl["step"], 4)][2] + "**.")
             if pl["total_cost"] > 0:
                 st.info(f"💰 Coût consommé : {format_usd(pl['total_cost'])}")
             if st.button("↩️ Nouvelle génération", type="primary"):
@@ -483,14 +493,14 @@ elif page == "generate":
             _show_validation()
 
         # ── EXÉCUTION de l'étape courante ────────────────────────────────────
-        elif pl["step"] < 6:
+        elif pl["step"] < 5:
             s = pl["step"]
             pl["states"][s] = "running"
             pl["details"][s] = "En cours…"
             stepper_ph.markdown(_stepper_html(pl["states"], pl["details"], pl["step_costs"]),
                                 unsafe_allow_html=True)
 
-            with st.status(f"{STEPS[s][1]} Étape {s+1}/6 — {STEPS[s][2]}", expanded=True) as status:
+            with st.status(f"{STEPS[s][1]} Étape {s+1}/5 — {STEPS[s][2]}", expanded=True) as status:
 
                 try:
                     if s == 0:
@@ -545,62 +555,60 @@ elif page == "generate":
                         detail = f"{len(pl['intel_paa'])} PAA" if pl["intel_paa"] else "⚠️ partiel"
                         _cost  = 0.0
 
-                    elif s in (2, 3, 4, 5):
+                    elif s in (2, 3, 4):
                         from writer import (
                             _build_system, _call_claude,
-                            PASS1_PROMPT, PASS2_PROMPT, PASS3_PROMPT, PASS4_PROMPT,
+                            BRIEFING_PROMPT, ARTICLE_PROMPT, META_PROMPT,
                         )
                         if pl["system_prompt"] is None:
-                            pl["system_prompt"] = _build_system(pl["style_ctx"], pl["seo_brief"])
+                            pl["system_prompt"] = _build_system(
+                                pl["style_ctx"] or "", pl["seo_brief"] or "")
                         system = pl["system_prompt"]
 
-                        if s == 2:
-                            prompt = PASS1_PROMPT.format(keyword=pl["keyword"])
-                        elif s == 3:
-                            prompt = PASS2_PROMPT.format(pass1_output=pl["introduction"])
-                        elif s == 4:
-                            prompt = PASS3_PROMPT.format(
-                                pass1_output=pl["introduction"],
-                                pass2_output=pl["plan"],
-                                target_word_count=config.TARGET_WORD_COUNT,
+                        if s == 2:  # Briefing & plan
+                            prompt = BRIEFING_PROMPT.format(
+                                keyword  = pl["keyword"],
+                                site_url = pl["site_url"],
+                                country  = pl["country"],
+                                seo_brief= pl["seo_brief"] or "(aucune donnée SEO disponible)",
                             )
-                        else:
-                            prompt = PASS4_PROMPT.format(
-                                full_draft=f"{pl['introduction']}\n\n{pl['body']}")
-
-                        text, in_t, out_t = _call_claude(system, prompt)
-                        _cost = PassCost(config.CLAUDE_SONNET, in_t, out_t).usd
-                        pl["pass_costs"].append([config.CLAUDE_SONNET, in_t, out_t])
-                        st.write(f"Tokens envoyés : {in_t:,}   |   reçus : {out_t:,}")
-
-                        if s == 2:
-                            pl["introduction"] = text
+                            text, in_t, out_t = _call_claude(system, prompt, max_tokens=4000)
+                            pl["briefing"] = text
                             wc = _count_words(text)
-                            st.write(f"Introduction — {wc} mots")
+                            st.write(f"Briefing — {wc} mots")
                             detail = f"{wc} mots"
-                        elif s == 3:
-                            pl["plan"] = text
-                            nb = text.count("##")
-                            st.write(f"Plan — {nb} sections")
-                            detail = f"{nb} sections"
-                        elif s == 4:
-                            pl["body"] = text
+
+                        elif s == 3:  # Article complet
+                            prompt = ARTICLE_PROMPT.format(
+                                keyword = pl["keyword"],
+                                briefing= pl["briefing"],
+                            )
+                            text, in_t, out_t = _call_claude(system, prompt, max_tokens=6000)
+                            pl["full_article"] = text
                             wc = _count_words(text)
-                            st.write(f"Corps — {wc} mots")
+                            st.write(f"Article — {wc} mots")
                             detail = f"{wc} mots"
-                        elif s == 5:
+
+                        elif s == 4:  # Métas + révision
+                            prompt = META_PROMPT.format(
+                                full_article=pl["full_article"] or ""
+                            )
+                            text, in_t, out_t = _call_claude(system, prompt, max_tokens=4000)
                             clean = text.strip().lstrip("```json").lstrip("```").rstrip("```")
                             try:
                                 p4 = _json.loads(clean)
                                 pl["meta_title"]       = p4.get("meta_title", "")
                                 pl["meta_description"] = p4.get("meta_description", "")
-                                revised = p4.get("revised_article",
-                                                 f"{pl['introduction']}\n\n{pl['body']}")
+                                revised = p4.get("revised_article", pl["full_article"])
                                 pl["full_article"] = f"{revised}\n\n{p4.get('cta_final','')}".strip()
                             except Exception:
-                                pl["full_article"] = f"{pl['introduction']}\n\n{pl['body']}"
+                                pass  # keep existing full_article
                             st.write(f"Meta title : {pl['meta_title']}")
                             detail = f"{len(pl['meta_title'])} car."
+
+                        _cost = PassCost(config.CLAUDE_SONNET, in_t, out_t).usd
+                        pl["pass_costs"].append([config.CLAUDE_SONNET, in_t, out_t])
+                        st.write(f"Tokens envoyés : {in_t:,}   |   reçus : {out_t:,}")
 
                     # Mise à jour stepper
                     pl["states"][s]     = "done"
@@ -616,7 +624,7 @@ elif page == "generate":
                     pl["step"]       = s + 1
                     status.update(label=f"❌ {STEPS[s][2]} — erreur", state="error")
                     st.error(str(err))
-                    if s not in (1, 5):
+                    if s not in (1, 4):  # SEO et métas peuvent échouer sans tout stopper
                         pl["stopped"] = True
                         pl["active"]  = False
 
@@ -630,7 +638,7 @@ elif page == "generate":
                 unsafe_allow_html=True,
             )
 
-            if pl["manual"] and not pl["stopped"] and pl["step"] <= 6:
+            if pl["manual"] and not pl["stopped"] and pl["step"] <= 5:
                 # ⚠️ Ne pas appeler st.rerun() ici — afficher la validation
                 # directement dans le même run pour éviter qu'elle disparaisse.
                 pl["waiting"] = True
@@ -640,17 +648,14 @@ elif page == "generate":
                 st.rerun()
 
         # ── TOUTES LES ÉTAPES FAITES → Sauvegarde & résultats ────────────────
-        elif pl["step"] == 6 and not pl["stopped"]:
+        elif pl["step"] == 5 and not pl["stopped"]:
             progress_ph.progress(100)
 
             from writer import ArticleOutput, format_final_output
             from cost_tracker import RequestCost
 
             article              = ArticleOutput(keyword=pl["keyword"], site_url=pl["site_url"])
-            article.introduction = pl["introduction"] or ""
-            article.plan_h2_h3   = pl["plan"] or ""
-            article.body         = pl["body"] or ""
-            article.full_article = pl["full_article"] or f"{article.introduction}\n\n{article.body}"
+            article.full_article = pl["full_article"] or ""
             article.meta_title   = pl["meta_title"]
             article.meta_description = pl["meta_description"]
             for model, in_t, out_t in pl["pass_costs"]:
@@ -669,9 +674,10 @@ elif page == "generate":
             bundle = {
                 "keyword":          pl["keyword"],
                 "site_url":         pl["site_url"],
+                "country":          pl.get("country", ""),
                 "meta_title":       pl["meta_title"],
                 "meta_description": pl["meta_description"],
-                "plan":             pl["plan"],
+                "briefing":         pl["briefing"] or "",
                 "full_article":     pl["full_article"],
                 "word_count":       _count_words(pl["full_article"] or ""),
                 "pass_logs":        [],
@@ -705,8 +711,8 @@ elif page == "generate":
                 for url in pl["intel_cannib"]:
                     st.caption(f"• {url}")
 
-            with st.expander("📐 Plan H2/H3", expanded=False):
-                st.code(pl["plan"], language="markdown")
+            with st.expander("� Briefing éditorial", expanded=False):
+                st.markdown(pl["briefing"] or "")
             with st.expander("📄 Article complet", expanded=True):
                 st.markdown(pl["full_article"])
 
