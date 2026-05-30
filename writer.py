@@ -255,29 +255,51 @@ Retourne UNIQUEMENT la partie suivante du briefing (en markdown) :
 [Longueur cible]
 """
 
-BRIEFING_PART3_SEO = """\
+BRIEFING_PART3_SEO_KEYWORDS = """\
 Voici le résumé du briefing établi précédemment :
 
 {context_summary}
 
 Ton rôle :
-Complète le briefing avec les spécifications SEO détaillées.
+Complète le briefing avec les spécifications SEO détaillées (mots-clés et métas).
 
 Données SEO disponibles :
 {seo_brief}
 
 À générer (en markdown, section ## SEO & Technique) :
-1. Mots-clés secondaires à intégrer (5-10 max, par priorité)
-2. Suggestions de méta-title (50-60 car.) et méta-description (140-160 car.)
-3. Questions fréquentes (FAQ) à intégrer dans la page (3-5 questions max)
-4. Note sur maillage interne si applicable (1-2 lignes)
+1. Mots-clés secondaires à intégrer (priorisés par pertinence)
+2. Recommandations de maillage interne (si applicable)
+3. Suggestions de méta-title (50-60 caractères) et méta-description (140-160 caractères)
 
 Règles absolues :
 - Pas d'emoji dans le texte
 - Pas de majuscule à chaque mot des titres
-- Sois concis et direct
+- Phrases naturelles et fluides
 
-Retourne UNIQUEMENT la section ## SEO & Technique complète.
+Retourne UNIQUEMENT la section ## SEO & Technique (mots-clés, maillage, métas).
+"""
+
+BRIEFING_PART3_SEO_FAQ = """\
+Voici le résumé du briefing établi précédemment :
+
+{context_summary}
+
+Ton rôle :
+Complète le briefing avec les spécifications SEO détaillées (FAQ et technique).
+
+Données SEO disponibles :
+{seo_brief}
+
+À générer (en markdown, section ## FAQ & Technique) :
+1. Questions fréquentes (FAQ) à intégrer dans la page
+2. Checklist technique (si applicable)
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres
+- Phrases naturelles et fluides
+
+Retourne UNIQUEMENT la section ## FAQ & Technique complète.
 """
 
 
@@ -368,16 +390,30 @@ def generate_chunked_briefing(
     # Summary for next call
     summary2 = _build_context_summary(part1 + "\n\n" + part2, max_words=120)
 
-    # Part 3: SEO & Technique
-    logger.info("[ChunkedBriefing] Part 3 — SEO & Technique")
-    p3 = BRIEFING_PART3_SEO.format(
+    # Part 3a: SEO Keywords & Metas
+    logger.info("[ChunkedBriefing] Part 3a — SEO Keywords & Metas")
+    p3a = BRIEFING_PART3_SEO_KEYWORDS.format(
         context_summary=summary2,
         seo_brief=seo_brief or "(aucune donnée SEO disponible)",
     )
-    part3, in3, out3 = _call_claude(system, p3, max_tokens=3000)
-    parts.append(part3)
-    total_in += in3
-    total_out += out3
+    part3a, in3a, out3a = _call_claude(system, p3a, max_tokens=2000)
+    parts.append(part3a)
+    total_in += in3a
+    total_out += out3a
+
+    # Summary for next call
+    summary3a = _build_context_summary(part1 + "\n\n" + part2 + "\n\n" + part3a, max_words=150)
+
+    # Part 3b: FAQ & Technique
+    logger.info("[ChunkedBriefing] Part 3b — FAQ & Technique")
+    p3b = BRIEFING_PART3_SEO_FAQ.format(
+        context_summary=summary3a,
+        seo_brief=seo_brief or "(aucune donnée SEO disponible)",
+    )
+    part3b, in3b, out3b = _call_claude(system, p3b, max_tokens=2000)
+    parts.append(part3b)
+    total_in += in3b
+    total_out += out3b
 
     full_briefing = "\n\n".join(parts)
     logger.info("[ChunkedBriefing] Complete — %d total tokens", total_in + total_out)
