@@ -368,9 +368,11 @@ elif page == "generate":
                 "style_ctx":     None,
                 "style_profile": None,
                 "seo_brief":     None,
-                "intel_paa":     [],
+                "intel_paa":      [],
                 "intel_secondary": [],
-                "intel_cannib":  [],
+                "intel_lsi":       [],
+                "intel_longtail":  [],
+                "intel_cannib":    [],
                 "briefing":      None,
                 "full_article":  None,
                 "meta_title":    "",
@@ -437,11 +439,20 @@ elif page == "generate":
                 with st.expander("Voir le style profile complet"):
                     st.json({k: v for k, v in p.items() if not k.startswith("_")})
             elif step_done == 1:
+                cl = st.session_state.pl.get("intel_cluster", {})
+                sec   = pl.get("intel_secondary", [])
+                lsi   = pl.get("intel_lsi", [])
+                lt    = pl.get("intel_longtail", [])
+                if sec:
+                    st.markdown(f"**Mots-clés secondaires ({len(sec)}) :** " + ", ".join(sec[:10]))
+                if lsi:
+                    st.markdown(f"**LSI / sémantique ({len(lsi)}) :** " + ", ".join(lsi[:12]))
+                if lt:
+                    st.markdown(f"**Longue traîne ({len(lt)}) :** " + ", ".join(lt[:8]))
                 if pl["intel_paa"]:
-                    st.markdown("**Questions PAA (contexte SEO) :**")
+                    st.markdown(f"**Questions PAA ({len(pl['intel_paa'])}) :**")
                     for q in pl["intel_paa"][:6]:
                         st.caption(f"• {q}")
-                    st.caption("Ces questions serviront de contexte au briefing — pas comme seule base.")
                 if pl["intel_cannib"]:
                     st.warning(f"⚠️ {len(pl['intel_cannib'])} risque(s) cannibalisation")
             elif step_done == 2 and pl["briefing"]:
@@ -542,17 +553,23 @@ elif page == "generate":
                         for err in intel.errors:
                             st.error(f"❌ {err}")
 
+                        cl = intel.keyword_cluster
                         st.write(f"{len(intel.serp_top10)} SERP · "
                                  f"{len(intel.paa_questions)} PAA · "
-                                 f"{len(intel.keyword_cluster.secondary)} KW sec.")
+                                 f"{len(cl.secondary)} KW sec. · "
+                                 f"{len(cl.lsi)} LSI · "
+                                 f"{len(cl.long_tail)} longue traîne")
                         if intel.cannibalisation_risk:
                             st.warning(f"⚠️ {len(intel.cannibalisation_risk)} risques cannibalisation")
 
                         pl["intel_paa"]       = intel.paa_questions
                         pl["intel_secondary"] = intel.keyword_cluster.secondary
+                        pl["intel_lsi"]       = intel.keyword_cluster.lsi
+                        pl["intel_longtail"]  = intel.keyword_cluster.long_tail
                         pl["intel_cannib"]    = [p.url for p in intel.cannibalisation_risk]
                         pl["seo_brief"]       = seo_brief
-                        detail = f"{len(pl['intel_paa'])} PAA" if pl["intel_paa"] else "⚠️ partiel"
+                        total_kw = len(cl.secondary) + len(cl.lsi) + len(cl.long_tail)
+                        detail = f"{total_kw} KW · {len(pl['intel_paa'])} PAA" if total_kw else "⚠️ partiel"
                         _cost  = 0.0
 
                     elif s in (2, 3, 4):

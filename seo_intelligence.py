@@ -44,8 +44,9 @@ class SerpResult:
 @dataclass
 class KeywordCluster:
     primary: str
-    secondary: list[str] = field(default_factory=list)
-    lsi: list[str] = field(default_factory=list)
+    secondary: list[str]  = field(default_factory=list)  # volume > 500
+    lsi: list[str]        = field(default_factory=list)  # volume 50-500
+    long_tail: list[str]  = field(default_factory=list)  # volume < 50 / questions
 
 
 @dataclass
@@ -131,34 +132,85 @@ def fetch_serp(keyword: str) -> tuple[list[SerpResult], list[str]]:
     return organic[: config.SERP_RESULTS_COUNT], paa
 
 
+def _parse_kw_items(items: list[dict], cluster: KeywordCluster,
+                    seen: set[str], limit: int = 40) -> None:
+    """
+    Classify keyword items into secondary / lsi / long_tail based on search volume.
+    Modifies cluster in-place. `seen` prevents duplicates across calls.
+    """
+    count = 0
+    for item in items:
+        if count >= limit:
+            break
+        kw  = (item.get("keyword") or "").strip()
+        vol = item.get("search_volume") or 0
+        if not kw or kw.lower() == cluster.primary.lower() or kw in seen:
+            continue
+        seen.add(kw)
+        count += 1
+        if vol >= 500:
+            cluster.secondary.append(kw)
+        elif vol >= 50:
+            cluster.lsi.append(kw)
+        else:
+            cluster.long_tail.append(kw)
+
+
 def fetch_keyword_cluster(keyword: str) -> KeywordCluster:
     """
-    Uses DataForSEO Keywords for Keywords to build a semantic cluster.
-    Falls back gracefully if the endpoint is unavailable.
+    Builds a rich semantic cluster by combining two DataForSEO endpoints:
+    1. keywords_for_keywords  — variations sémantiques directes
+    2. related_keywords       — champ sémantique élargi (entités, synonymes)
+    Falls back gracefully if either endpoint is unavailable.
     """
     cluster = KeywordCluster(primary=keyword)
+    seen: set[str] = set()
+
+    # ── Source 1 : keywords_for_keywords ──────────────────────────────────────
     try:
-        payload = [
-            {
-                "keywords": [keyword],
-                "language_code": config.DATAFORSEO_LANGUAGE,
-                "location_code": config.DATAFORSEO_LOCATION,
-            }
-        ]
-        data   = _dfs_request("dataforseo_labs/google/keywords_for_keywords/live", payload)
-        items  = (
-            data.get("tasks", [{}])[0]
-            .get("result", [{}])[0]
-            .get("items", [])
+        data  = _dfs_request(
+            "dataforseo_labs/google/keywords_for_keywords/live",
+            [{"keywords": [keyword],
+              "language_code": config.DATAFORSEO_LANGUAGE,
+              "location_code": config.DATAFORSEO_LOCATION,
+              "limit": 50}],
         )
-        for item in items[:20]:
-            kw = item.get("keyword", "")
-            if item.get("search_volume", 0) > 100:
-                cluster.secondary.append(kw)
-            else:
-                cluster.lsi.append(kw)
+        items = (
+            data.get("tasks", [{}])[0]
+                .get("result", [{}])[0]
+                .get("items", [])
+        )
+        _parse_kw_items(items, cluster, seen, limit=40)
+        logger.info("[SEO] keywords_for_keywords — %d items parsed", len(items))
     except Exception as exc:
-        logger.warning("Keyword clustering failed: %s", exc)
+        logger.warning("keywords_for_keywords failed: %s", exc)
+
+    # ── Source 2 : related_keywords ───────────────────────────────────────────
+    try:
+        data  = _dfs_request(
+            "dataforseo_labs/google/related_keywords/live",
+            [{"keyword": keyword,
+              "language_code": config.DATAFORSEO_LANGUAGE,
+              "location_code": config.DATAFORSEO_LOCATION,
+              "limit": 50,
+              "depth": 2}],
+        )
+        items = (
+            data.get("tasks", [{}])[0]
+                .get("result", [{}])[0]
+                .get("items", [])
+        )
+        # related_keywords wraps each item in {keyword_data: {...}}
+        flat = []
+        for it in items:
+            kd = it.get("keyword_data") or it
+            flat.append({"keyword": kd.get("keyword", ""),
+                         "search_volume": (kd.get("keyword_info") or {}).get("search_volume", 0)})
+        _parse_kw_items(flat, cluster, seen, limit=40)
+        logger.info("[SEO] related_keywords — %d items parsed", len(items))
+    except Exception as exc:
+        logger.warning("related_keywords failed: %s", exc)
+
     return cluster
 
 
@@ -338,15 +390,22 @@ def seo_intel_to_brief(intel: SEOIntelligence) -> str:
     Serialises SEOIntelligence to a compact brief string for injection
     into the writer's system prompt.
     """
+    cl = intel.keyword_cluster
     lines = [
         f"## SEO Brief — mot-clé cible : {intel.keyword}",
         "",
-        "### Mots-clés secondaires à intégrer naturellement",
-        ", ".join(intel.keyword_cluster.secondary[:8]) or "—",
+        "### Mots-clés secondaires (volume ≥ 500 — à intégrer naturellement)",
+        ", ".join(cl.secondary[:12]) or "—",
         "",
-        "### Questions PAA (à adresser dans l'article)",
+        "### Mots-clés LSI / sémantique élargie (volume 50-500)",
+        ", ".join(cl.lsi[:15]) or "—",
+        "",
+        "### Longue traîne & questions associées",
+        ", ".join(cl.long_tail[:10]) or "—",
+        "",
+        "### Questions PAA (à traiter dans l'article — contexte, pas seule base)",
     ]
-    for q in intel.paa_questions[:6]:
+    for q in intel.paa_questions[:8]:
         lines.append(f"- {q}")
 
     lines += [
