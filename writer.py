@@ -247,6 +247,7 @@ Règles absolues :
 - Pas d'emoji dans le texte
 - Pas de majuscule à chaque mot des titres
 - Phrases naturelles et fluides
+- SI c'est une continuation : NE JAMAIS répéter les headers déjà écrits, continue directement avec le contenu manquant
 
 Retourne UNIQUEMENT la partie suivante du briefing (en markdown) :
 ## Structure & Guidelines
@@ -405,6 +406,7 @@ def generate_chunked_briefing(
 
     # Part 2: Structure & Guidelines (3 calls, 6000 tokens total)
     part2_parts = []
+    seen_headers = set()
     continuation = ""
     for i in range(3):
         logger.info("[ChunkedBriefing] Part 2.%d — Structure & Guidelines", i + 1)
@@ -413,6 +415,26 @@ def generate_chunked_briefing(
             continuation_instruction=continuation,
         )
         part2_chunk, in2, out2 = _call_claude(system, p2, max_tokens=2000)
+        # Post-process: remove duplicate headers in continuation chunks
+        if i > 0:
+            import re
+            lines = part2_chunk.split('\n')
+            filtered_lines = []
+            for line in lines:
+                # Check if line is a header (## or ###)
+                header_match = re.match(r'^(#{2,3})\s+(.+)$', line)
+                if header_match:
+                    header_text = header_match.group(2).strip().lower()
+                    if header_text in seen_headers:
+                        continue  # Skip duplicate header
+                    seen_headers.add(header_text)
+                filtered_lines.append(line)
+            part2_chunk = '\n'.join(filtered_lines)
+        else:
+            # First chunk: track all headers
+            import re
+            for match in re.finditer(r'^(#{2,3})\s+(.+)$', part2_chunk, re.MULTILINE):
+                seen_headers.add(match.group(2).strip().lower())
         part2_parts.append(part2_chunk)
         total_in += in2
         total_out += out2
