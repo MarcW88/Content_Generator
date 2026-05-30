@@ -257,307 +257,439 @@ if page == "dashboard":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE — GÉNÉRER
+# PAGE — GÉNÉRER  (machine à états — validation manuelle optionnelle)
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "generate":
-    st.markdown("## ✍️ Nouveau contenu")
+    import json as _json
 
-    col_a, col_b, col_c = st.columns([2, 2, 1])
-    with col_a:
-        site_url = st.text_input(
-            "Site cible",
-            placeholder="https://www.monsite.com",
-            key="gen_site_url",
+    # ── Session state ─────────────────────────────────────────────────────────
+    if "pl" not in st.session_state:
+        st.session_state.pl = None
+    pl = st.session_state.pl
+
+    STEPS = [
+        ("Style",   "🎨", "Analyse du ton éditorial"),
+        ("SEO",     "📊", "Données SERP / PAA"),
+        ("Passe 1", "✏️",  "Introduction"),
+        ("Passe 2", "🗂️",  "Plan H2/H3"),
+        ("Passe 3", "📝", "Corps de l'article"),
+        ("Passe 4", "🔍", "Méta + Révision"),
+    ]
+    PROGRESS = [5, 16, 35, 55, 72, 88]
+
+    def _stepper_html(states, details, step_costs):
+        icon_map = {"pending": "○", "running": "◉", "done": "✓", "error": "✗",
+                    "waiting": "⏸"}
+        css_map  = {"pending": "", "running": " running", "done": " done",
+                    "error": " error", "waiting": " running"}
+        boxes = ""
+        for i, (short, emoji, name) in enumerate(STEPS):
+            ic     = icon_map[states[i]]
+            cls    = css_map[states[i]]
+            cost_s = f'<div class="step-cost">{format_usd(step_costs[i])}</div>' \
+                     if step_costs[i] > 0 else ""
+            boxes += (
+                f'<div class="step-box{cls}">'
+                f'<div class="step-num">{short} {ic}</div>'
+                f'<div class="step-icon">{emoji}</div>'
+                f'<div class="step-name">{name}</div>'
+                f'<div class="step-detail">{details[i]}</div>'
+                f'{cost_s}</div>'
+            )
+        return (
+            f'<div class="pipeline-wrapper">'
+            f'<div class="pipeline-title">Progression de la génération</div>'
+            f'<div class="step-row">{boxes}</div>'
+            f'</div>'
         )
-    with col_b:
-        keyword = st.text_input(
-            "Mot-clé principal",
-            placeholder="rénovation cuisine Bruxelles",
-            key="gen_keyword",
+
+    # ── FORM — aucun pipeline actif ───────────────────────────────────────────
+    if not pl or not pl.get("active"):
+        st.markdown("## ✍️ Nouveau contenu")
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            site_url = st.text_input("Site cible", placeholder="https://www.monsite.com",
+                                     key="gen_site_url")
+        with col_b:
+            keyword = st.text_input("Mot-clé principal",
+                                    placeholder="rénovation cuisine Bruxelles",
+                                    key="gen_keyword")
+
+        opt1, opt2 = st.columns(2)
+        with opt1:
+            manual = st.checkbox(
+                "✋ Validation manuelle entre chaque étape",
+                value=True,
+                help="Si coché, l'agent s'arrête après chaque étape pour que tu puisses relire et valider avant de continuer.",
+            )
+        with opt2:
+            refresh_style = st.checkbox("🔄 Forcer rebuild style profile", value=False)
+
+        if site_url and keyword:
+            from tone_analyzer import profile_cache_exists
+            cached = profile_cache_exists(site_url)
+            est    = estimate_request_cost(style_profile_cached=cached)
+            st.markdown(
+                f'<div style="margin:8px 0 16px">'
+                f'<span class="cost-badge">💰 Estimation : {format_usd(est.total_usd)}'
+                f'{"  ·  style profile en cache" if cached else "  ·  inclut analyse tonale"}'
+                f'</span></div>',
+                unsafe_allow_html=True,
+            )
+
+        launch = st.button(
+            "⚡ Lancer la génération",
+            type="primary",
+            disabled=not bool(site_url and keyword),
         )
-    with col_c:
-        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-        refresh_style = st.checkbox("Forcer rebuild style", value=False)
 
-    # Cost estimate
-    if site_url and keyword:
-        from tone_analyzer import profile_cache_exists
-        cached = profile_cache_exists(site_url)
-        est    = estimate_request_cost(style_profile_cached=cached)
-        st.markdown(
-            f'<div style="margin:8px 0 16px">'
-            f'<span class="cost-badge">💰 Estimation : {format_usd(est.total_usd)}'
-            f'{"  ·  style profile en cache" if cached else "  ·  inclut analyse tonale"}'
-            f'</span></div>',
-            unsafe_allow_html=True,
-        )
+        if not (site_url and keyword):
+            st.caption("Remplis le site cible et le mot-clé pour continuer.")
 
-    launch = st.button(
-        "⚡ Lancer la génération",
-        type="primary",
-        disabled=not (site_url.strip() if site_url else False) or not (keyword.strip() if keyword else False),
-    )
+        if launch and site_url and keyword:
+            if not config.ANTHROPIC_API_KEY:
+                st.error("❌ `ANTHROPIC_API_KEY` manquante.")
+                st.stop()
+            st.session_state.pl = {
+                "active":        True,
+                "stopped":       False,
+                "waiting":       False,  # en attente de validation manuelle
+                "manual":        manual,
+                "step":          0,      # 0-5 = étape courante, 6 = terminé
+                "keyword":       keyword,
+                "site_url":      site_url,
+                "refresh_style": refresh_style,
+                # outputs
+                "style_ctx":     None,
+                "style_profile": None,
+                "seo_brief":     None,
+                "intel_paa":     [],
+                "intel_secondary": [],
+                "intel_cannib":  [],
+                "introduction":  None,
+                "plan":          None,
+                "body":          None,
+                "full_article":  None,
+                "meta_title":    "",
+                "meta_description": "",
+                "system_prompt": None,
+                # stepper display
+                "states":        ["pending"] * 6,
+                "details":       [""] * 6,
+                "step_costs":    [0.0] * 6,
+                "total_cost":    0.0,
+                # pass costs for final export
+                "pass_costs":    [],  # list of [model, in_t, out_t]
+            }
+            st.rerun()
 
-    if not (site_url and keyword):
-        st.markdown(
-            '<p style="color:#8b949e;font-size:13px">Remplis le site cible et le mot-clé pour continuer.</p>',
-            unsafe_allow_html=True,
-        )
+    # ── PIPELINE ACTIF ────────────────────────────────────────────────────────
+    if pl and pl.get("active"):
+        st.markdown(f"## ✍️ Génération — *{pl['keyword']}*")
+        st.caption(f"🌐 {pl['site_url']}   ·   {'✋ Validation manuelle activée' if pl['manual'] else '⚡ Mode automatique'}")
 
-    if launch and site_url and keyword:
-        if not config.ANTHROPIC_API_KEY:
-            st.error("❌ `ANTHROPIC_API_KEY` manquante — configure tes secrets Streamlit.")
-            st.stop()
-
-        import json as _json
-
-        # ═══════════════════════════════════════════════════════════════
-        # Pipeline stepper — 6 étapes visibles
-        # ═══════════════════════════════════════════════════════════════
-        STEPS = [
-            ("Style",    "🎨", "Analyse du ton"),
-            ("SEO",      "📊", "Données SERP"),
-            ("Passe 1",  "✏️",  "Introduction"),
-            ("Passe 2",  "🗂️",  "Plan H2/H3"),
-            ("Passe 3",  "📝", "Corps"),
-            ("Passe 4",  "🔍", "Méta + Révision"),
-        ]
-        states  = ["pending"] * 6   # pending | running | done | error
-        details = [""] * 6
-        costs   = [0.0] * 6
-        running_cost = [0.0]
-
-        stepper_ph  = st.empty()
-        progress_bar = st.progress(0)
+        stepper_ph   = st.empty()
+        progress_ph  = st.empty()
         cost_ph      = st.empty()
-        log_ph       = st.empty()
-
-        def _stepper():
-            icon_map = {"pending":"○", "running":"◉", "done":"✓", "error":"✗"}
-            css_map  = {"pending":"", "running":" running", "done":" done", "error":" error"}
-            boxes = ""
-            for i, (short, emoji, name) in enumerate(STEPS):
-                st_cls  = css_map[states[i]]
-                ic      = icon_map[states[i]]
-                cost_ln = f'<div class="step-cost">{format_usd(costs[i])}</div>' if costs[i] > 0 else ""
-                boxes  += (
-                    f'<div class="step-box{st_cls}">'
-                    f'<div class="step-num">{short} {ic}</div>'
-                    f'<div class="step-icon">{emoji}</div>'
-                    f'<div class="step-name">{name}</div>'
-                    f'<div class="step-detail">{details[i]}</div>'
-                    f'{cost_ln}</div>'
-                )
-            stepper_ph.markdown(
-                f'<div class="pipeline-wrapper">'
-                f'<div class="pipeline-title">Progression de la génération</div>'
-                f'<div class="step-row">{boxes}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            cost_ph.markdown(
-                f'<div style="text-align:right;margin:-8px 0 12px">'
-                f'<span class="cost-badge">💰 Coût en cours : {format_usd(running_cost[0])}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-        def _set(i, state, detail="", cost=0.0):
-            states[i]  = state
-            details[i] = detail
-            costs[i]   = cost
-            running_cost[0] += cost
-            _stepper()
-
-        _stepper()  # render initial state
-
-        # ── Étape 0 — Style profile ───────────────────────────────────────────
-        _set(0, "running", "Scraping + Claude Opus…")
-        progress_bar.progress(5)
-        with log_ph.status("🎨 Étape 1/6 — Analyse du style éditorial", expanded=True) as s_log:
-            try:
-                from tone_analyzer import build_style_profile, style_profile_to_system_context
-                profile_data, sp_in, sp_out = build_style_profile(site_url, force_refresh=refresh_style)
-                style_ctx = style_profile_to_system_context(profile_data)
-                sp_cost = PassCost(config.CLAUDE_OPUS, sp_in, sp_out).usd if sp_in else 0
-                st.write(f"Site analysé : {site_url}")
-                st.write(f"{len(profile_data)} attributs extraits {'(depuis cache)' if not sp_in else f'— {sp_in:,} tokens lus'}")
-                s_log.update(label="🎨 Style éditorial — ✅ terminé", state="complete", expanded=False)
-                _set(0, "done", "Cache" if not sp_in else f"{sp_in:,} tok", sp_cost)
-            except Exception as e:
-                s_log.update(label="🎨 Style — ❌ erreur", state="error")
-                _set(0, "error", str(e)[:30])
-                st.error(str(e)); st.stop()
-
-        # ── Étape 1 — SEO intelligence ────────────────────────────────────────
-        _set(1, "running", "DataForSEO + GSC…")
-        progress_bar.progress(16)
-        with log_ph.status("📊 Étape 2/6 — Données SEO", expanded=True) as s_log:
-            try:
-                from seo_intelligence import gather_seo_intelligence, seo_intel_to_brief
-                intel     = gather_seo_intelligence(keyword)
-                seo_brief = seo_intel_to_brief(intel)
-                st.write(f"Mot-clé : {keyword}")
-                st.write(f"{len(intel.serp_top10)} résultats SERP analysés")
-                st.write(f"{len(intel.paa_questions)} questions PAA extraites")
-                st.write(f"{len(intel.keyword_cluster.secondary)} mots-clés secondaires")
-                if intel.cannibalisation_risk:
-                    st.warning(f"⚠️ {len(intel.cannibalisation_risk)} risques de cannibalisation détectés")
-                s_log.update(label="📊 SEO — ✅ terminé", state="complete", expanded=False)
-                _set(1, "done", f"{len(intel.paa_questions)} PAA")
-            except Exception as e:
-                st.write(f"⚠️ SEO partiel : {e}")
-                s_log.update(label="📊 SEO — ⚠️ partiel", state="complete", expanded=False)
-                from seo_intelligence import SEOIntelligence, KeywordCluster, seo_intel_to_brief
-                intel     = SEOIntelligence(keyword=keyword, keyword_cluster=KeywordCluster(primary=keyword))
-                seo_brief = seo_intel_to_brief(intel)
-                _set(1, "done", "partiel")
-
-        # ── Passes 1-4 ────────────────────────────────────────────────────────
-        from writer import (
-            _build_system, _call_claude,
-            PASS1_PROMPT, PASS2_PROMPT, PASS3_PROMPT, PASS4_PROMPT,
-            ArticleOutput,
+        stepper_ph.markdown(_stepper_html(pl["states"], pl["details"], pl["step_costs"]),
+                            unsafe_allow_html=True)
+        progress_ph.progress(PROGRESS[min(pl["step"], 5)] if pl["step"] < 6 else 100)
+        cost_ph.markdown(
+            f'<div style="text-align:right;margin:-4px 0 16px">'
+            f'<span class="cost-badge">💰 Coût en cours : {format_usd(pl["total_cost"])}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
         )
-        article = ArticleOutput(keyword=keyword, site_url=site_url)
-        system  = _build_system(style_ctx, seo_brief)
 
-        PASS_CFG = [
-            (2, 35, PASS1_PROMPT.format(keyword=keyword),                          "Étape 3/6 — Introduction",       "intro"),
-            (3, 55, None,                                                            "Étape 4/6 — Plan H2/H3",         "plan"),
-            (4, 72, None,                                                            "Étape 5/6 — Corps de l'article", "body"),
-            (5, 88, None,                                                            "Étape 6/6 — Méta + Révision",    "meta"),
-        ]
+        # ── Arrêt demandé ────────────────────────────────────────────────────
+        if pl["stopped"]:
+            st.warning("⛔ Génération arrêtée à l'étape **" +
+                       STEPS[min(pl["step"], 5)][2] + "**.")
+            if pl["total_cost"] > 0:
+                st.info(f"💰 Coût consommé : {format_usd(pl['total_cost'])}")
+            if st.button("↩️ Nouvelle génération", type="primary"):
+                st.session_state.pl = None
+                st.rerun()
 
-        for step_i, pct, prompt_tpl, label, role in PASS_CFG:
-            pass_n = step_i - 1  # pass number 1-4
-            _set(step_i, "running", "Claude Sonnet…")
-            progress_bar.progress(pct)
+        # ── En attente de validation ─────────────────────────────────────────
+        elif pl["waiting"]:
+            step_done = pl["step"] - 1  # l'étape qui vient de se terminer
 
-            # Build prompt dynamically for passes 2-4
-            if role == "plan":
-                prompt_tpl = PASS2_PROMPT.format(pass1_output=article.introduction)
-            elif role == "body":
-                prompt_tpl = PASS3_PROMPT.format(
-                    pass1_output=article.introduction,
-                    pass2_output=article.plan_h2_h3,
-                    target_word_count=config.TARGET_WORD_COUNT,
-                )
-            elif role == "meta":
-                prompt_tpl = PASS4_PROMPT.format(full_draft=f"{article.introduction}\n\n{article.body}")
+            st.markdown(f"### ⏸ Validation requise — {STEPS[step_done][2]}")
+            st.markdown("Relis le résultat ci-dessous, puis choisis de continuer ou d'arrêter.")
 
-            with log_ph.status(f"✍️ {label}", expanded=True) as s_log:
+            # Aperçu du résultat de l'étape
+            with st.container():
+                if step_done == 0 and pl["style_profile"]:
+                    p = pl["style_profile"]
+                    c1, c2 = st.columns(2)
+                    c1.markdown("**Tonalité :** " + ", ".join(p.get("tonality", [])))
+                    c1.markdown("**POV :** " + p.get("pov", "—"))
+                    c2.markdown("**Patterns :** " + ", ".join(p.get("recurring_patterns", [])[:4]))
+                    c2.markdown("**Vocab. évité :** " + ", ".join(p.get("avoided_vocabulary", [])[:4]))
+                    with st.expander("Voir le style profile complet"):
+                        st.json(p)
+
+                elif step_done == 1:
+                    if pl["intel_paa"]:
+                        st.markdown("**Questions PAA extraites :**")
+                        for q in pl["intel_paa"][:6]:
+                            st.caption(f"• {q}")
+                    if pl["intel_cannib"]:
+                        st.warning(f"⚠️ {len(pl['intel_cannib'])} risque(s) de cannibalisation : "
+                                   + ", ".join(pl["intel_cannib"][:3]))
+
+                elif step_done == 2 and pl["introduction"]:
+                    st.markdown(pl["introduction"])
+
+                elif step_done == 3 and pl["plan"]:
+                    st.code(pl["plan"], language="markdown")
+
+                elif step_done == 4 and pl["body"]:
+                    st.caption(f"{_count_words(pl['body'])} mots")
+                    with st.expander("Lire le corps de l'article", expanded=True):
+                        st.markdown(pl["body"])
+
+                elif step_done == 5:
+                    st.markdown(f"**🏷️ Meta title :** {pl['meta_title']}")
+                    st.markdown(f"**� Meta description :** {pl['meta_description']}")
+                    with st.expander("Article révisé complet", expanded=False):
+                        st.markdown(pl["full_article"])
+
+            st.markdown("---")
+            btn_ok, btn_stop = st.columns([1, 1])
+            next_label = "Enregistrer l'article ✅" if step_done == 5 \
+                         else f"Valider → {STEPS[step_done + 1][2]} ➜"
+            with btn_ok:
+                if st.button(next_label, type="primary", use_container_width=True):
+                    pl["waiting"] = False
+                    # step déjà incrémenté avant le rerun qui a posé waiting=True
+                    st.rerun()
+            with btn_stop:
+                if st.button("⛔ Arrêter la génération", use_container_width=True):
+                    pl["stopped"] = True
+                    pl["active"]  = False
+                    st.rerun()
+
+        # ── EXÉCUTION de l'étape courante ────────────────────────────────────
+        elif pl["step"] < 6:
+            s = pl["step"]
+            pl["states"][s] = "running"
+            pl["details"][s] = "En cours…"
+            stepper_ph.markdown(_stepper_html(pl["states"], pl["details"], pl["step_costs"]),
+                                unsafe_allow_html=True)
+
+            with st.status(f"{STEPS[s][1]} Étape {s+1}/6 — {STEPS[s][2]}", expanded=True) as status:
+
                 try:
-                    text, in_t, out_t = _call_claude(system, prompt_tpl)
-                    p_cost = PassCost(config.CLAUDE_SONNET, in_t, out_t).usd
-                    article.cost.passes.append(PassCost(config.CLAUDE_SONNET, in_t, out_t))
+                    if s == 0:
+                        from tone_analyzer import build_style_profile, style_profile_to_system_context
+                        profile_data, sp_in, sp_out = build_style_profile(
+                            pl["site_url"], force_refresh=pl["refresh_style"])
+                        style_ctx = style_profile_to_system_context(profile_data)
+                        sp_cost   = PassCost(config.CLAUDE_OPUS, sp_in, sp_out).usd if sp_in else 0
+                        pl["style_profile"] = profile_data
+                        pl["style_ctx"]     = style_ctx
+                        st.write(f"Site analysé : {pl['site_url']}")
+                        st.write(f"{len(profile_data)} attributs extraits "
+                                 f"{'(cache)' if not sp_in else f'— {sp_in:,} tokens'}")
+                        detail = "cache" if not sp_in else f"{sp_in:,} tok"
+                        _cost  = sp_cost
 
-                    st.write(f"Tokens envoyés : {in_t:,}   |   Tokens reçus : {out_t:,}")
+                    elif s == 1:
+                        from seo_intelligence import (gather_seo_intelligence,
+                                                      seo_intel_to_brief,
+                                                      SEOIntelligence, KeywordCluster)
+                        try:
+                            intel     = gather_seo_intelligence(pl["keyword"])
+                            seo_brief = seo_intel_to_brief(intel)
+                            st.write(f"{len(intel.serp_top10)} SERP · "
+                                     f"{len(intel.paa_questions)} PAA · "
+                                     f"{len(intel.keyword_cluster.secondary)} KW sec.")
+                            if intel.cannibalisation_risk:
+                                st.warning(f"⚠️ {len(intel.cannibalisation_risk)} risques cannibalisation")
+                            pl["intel_paa"]       = intel.paa_questions
+                            pl["intel_secondary"] = intel.keyword_cluster.secondary
+                            pl["intel_cannib"]    = [p.url for p in intel.cannibalisation_risk]
+                        except Exception as seo_err:
+                            st.write(f"⚠️ SEO partiel : {seo_err}")
+                            intel     = SEOIntelligence(keyword=pl["keyword"],
+                                                        keyword_cluster=KeywordCluster(primary=pl["keyword"]))
+                            seo_brief = seo_intel_to_brief(intel)
+                            pl["intel_paa"] = []
+                        pl["seo_brief"] = seo_brief
+                        detail = f"{len(pl['intel_paa'])} PAA"
+                        _cost  = 0.0
 
-                    if role == "intro":
-                        article.introduction = text
-                        wc = _count_words(text)
-                        st.write(f"Introduction rédigée — {wc} mots")
-                        _set(step_i, "done", f"{wc} mots", p_cost)
+                    elif s in (2, 3, 4, 5):
+                        from writer import (
+                            _build_system, _call_claude,
+                            PASS1_PROMPT, PASS2_PROMPT, PASS3_PROMPT, PASS4_PROMPT,
+                        )
+                        if pl["system_prompt"] is None:
+                            pl["system_prompt"] = _build_system(pl["style_ctx"], pl["seo_brief"])
+                        system = pl["system_prompt"]
 
-                    elif role == "plan":
-                        article.plan_h2_h3 = text
-                        nb = text.count("##")
-                        st.write(f"Plan généré — {nb} sections H2/H3")
-                        with st.expander("Voir le plan", expanded=False):
-                            st.code(text, language="markdown")
-                        _set(step_i, "done", f"{nb} sections", p_cost)
+                        if s == 2:
+                            prompt = PASS1_PROMPT.format(keyword=pl["keyword"])
+                        elif s == 3:
+                            prompt = PASS2_PROMPT.format(pass1_output=pl["introduction"])
+                        elif s == 4:
+                            prompt = PASS3_PROMPT.format(
+                                pass1_output=pl["introduction"],
+                                pass2_output=pl["plan"],
+                                target_word_count=config.TARGET_WORD_COUNT,
+                            )
+                        else:
+                            prompt = PASS4_PROMPT.format(
+                                full_draft=f"{pl['introduction']}\n\n{pl['body']}")
 
-                    elif role == "body":
-                        article.body = text
-                        wc = _count_words(text)
-                        st.write(f"Corps rédigé — {wc} mots")
-                        _set(step_i, "done", f"{wc} mots", p_cost)
+                        text, in_t, out_t = _call_claude(system, prompt)
+                        _cost = PassCost(config.CLAUDE_SONNET, in_t, out_t).usd
+                        pl["pass_costs"].append([config.CLAUDE_SONNET, in_t, out_t])
+                        st.write(f"Tokens envoyés : {in_t:,}   |   reçus : {out_t:,}")
 
-                    elif role == "meta":
-                        clean = text.strip().lstrip("```json").lstrip("```").rstrip("```")
-                        p4 = _json.loads(clean)
-                        article.meta_title       = p4.get("meta_title", "")
-                        article.meta_description = p4.get("meta_description", "")
-                        revised                  = p4.get("revised_article", f"{article.introduction}\n\n{article.body}")
-                        article.full_article     = f"{revised}\n\n{p4.get('cta_final','')}".strip()
-                        st.write(f"Meta title : {article.meta_title}")
-                        st.write(f"Meta desc  : {article.meta_description}")
-                        _set(step_i, "done", f"{len(article.meta_title)} car.", p_cost)
+                        if s == 2:
+                            pl["introduction"] = text
+                            wc = _count_words(text)
+                            st.write(f"Introduction — {wc} mots")
+                            detail = f"{wc} mots"
+                        elif s == 3:
+                            pl["plan"] = text
+                            nb = text.count("##")
+                            st.write(f"Plan — {nb} sections")
+                            detail = f"{nb} sections"
+                        elif s == 4:
+                            pl["body"] = text
+                            wc = _count_words(text)
+                            st.write(f"Corps — {wc} mots")
+                            detail = f"{wc} mots"
+                        elif s == 5:
+                            clean = text.strip().lstrip("```json").lstrip("```").rstrip("```")
+                            try:
+                                p4 = _json.loads(clean)
+                                pl["meta_title"]       = p4.get("meta_title", "")
+                                pl["meta_description"] = p4.get("meta_description", "")
+                                revised = p4.get("revised_article",
+                                                 f"{pl['introduction']}\n\n{pl['body']}")
+                                pl["full_article"] = f"{revised}\n\n{p4.get('cta_final','')}".strip()
+                            except Exception:
+                                pl["full_article"] = f"{pl['introduction']}\n\n{pl['body']}"
+                            st.write(f"Meta title : {pl['meta_title']}")
+                            detail = f"{len(pl['meta_title'])} car."
 
-                    s_log.update(label=f"✅ {label} — terminé", state="complete", expanded=False)
+                    # Mise à jour stepper
+                    pl["states"][s]     = "done"
+                    pl["details"][s]    = detail
+                    pl["step_costs"][s] = _cost
+                    pl["total_cost"]   += _cost
+                    pl["step"]          = s + 1
+                    status.update(label=f"✅ {STEPS[s][2]} — terminé", state="complete", expanded=False)
 
-                except Exception as e:
-                    s_log.update(label=f"❌ {label} — erreur", state="error")
-                    _set(step_i, "error", str(e)[:30])
-                    if role != "meta":
-                        st.error(str(e)); st.stop()
-                    else:
-                        article.full_article = f"{article.introduction}\n\n{article.body}"
+                except Exception as err:
+                    pl["states"][s]  = "error"
+                    pl["details"][s] = str(err)[:40]
+                    pl["step"]       = s + 1
+                    status.update(label=f"❌ {STEPS[s][2]} — erreur", state="error")
+                    st.error(str(err))
+                    if s not in (1, 5):
+                        pl["stopped"] = True
+                        pl["active"]  = False
 
-        article.cost.dataforseo_tasks = 3 if config.DATAFORSEO_LOGIN else 0
-        progress_bar.progress(100)
-        log_ph.success(f"✅ Article généré — {_count_words(article.full_article)} mots · Coût réel : {format_usd(article.cost.total_usd)}")
-        cost_ph.empty()
+            # Mise à jour affichage
+            stepper_ph.markdown(_stepper_html(pl["states"], pl["details"], pl["step_costs"]),
+                                unsafe_allow_html=True)
+            cost_ph.markdown(
+                f'<div style="text-align:right;margin:-4px 0 16px">'
+                f'<span class="cost-badge">💰 Coût en cours : {format_usd(pl["total_cost"])}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
-        # ── Save ──────────────────────────────────────────────────────────────
-        os.makedirs(config.OUTPUT_DIR, exist_ok=True)
-        slug = _slugify(keyword)
-        ts   = datetime.now().strftime("%Y%m%d_%H%M")
-        base = os.path.join(config.OUTPUT_DIR, f"{slug}_{ts}")
+            if pl["manual"] and not pl["stopped"] and pl["step"] <= 6:
+                pl["waiting"] = True
+            st.rerun()
 
-        from writer import format_final_output
-        md_content = format_final_output(article)
-        with open(f"{base}.md", "w", encoding="utf-8") as f:
-            f.write(md_content)
+        # ── TOUTES LES ÉTAPES FAITES → Sauvegarde & résultats ────────────────
+        elif pl["step"] == 6 and not pl["stopped"]:
+            progress_ph.progress(100)
 
-        bundle = {
-            "keyword":          article.keyword,
-            "site_url":         site_url,
-            "meta_title":       article.meta_title,
-            "meta_description": article.meta_description,
-            "plan":             article.plan_h2_h3,
-            "full_article":     article.full_article,
-            "word_count":       _count_words(article.full_article),
-            "pass_logs":        article.pass_logs,
-            "generated_at":     datetime.now().isoformat(),
-            "cost":             article.cost.to_dict(),
-            "seo": {
-                "secondary_keywords": intel.keyword_cluster.secondary,
-                "paa":                intel.paa_questions,
-                "cannibalisations":   [p.url for p in intel.cannibalisation_risk],
-            },
-        }
-        json_content = _json.dumps(bundle, ensure_ascii=False, indent=2)
-        with open(f"{base}.json", "w", encoding="utf-8") as f:
-            f.write(json_content)
+            from writer import ArticleOutput, format_final_output
+            from cost_tracker import RequestCost
 
-        # ── Results ───────────────────────────────────────────────────────────
-        st.markdown('<div class="section-hdr">Résultats</div>', unsafe_allow_html=True)
+            article              = ArticleOutput(keyword=pl["keyword"], site_url=pl["site_url"])
+            article.introduction = pl["introduction"] or ""
+            article.plan_h2_h3   = pl["plan"] or ""
+            article.body         = pl["body"] or ""
+            article.full_article = pl["full_article"] or f"{article.introduction}\n\n{article.body}"
+            article.meta_title   = pl["meta_title"]
+            article.meta_description = pl["meta_description"]
+            for model, in_t, out_t in pl["pass_costs"]:
+                article.cost.passes.append(PassCost(model, in_t, out_t))
+            article.cost.dataforseo_tasks = 3 if config.DATAFORSEO_LOGIN else 0
 
-        r1, r2, r3, r4 = st.columns(4)
-        r1.markdown(_kpi("Mots", str(bundle["word_count"])), unsafe_allow_html=True)
-        r2.markdown(_kpi("Coût réel", format_usd(article.cost.total_usd)), unsafe_allow_html=True)
-        r3.markdown(_kpi("Tokens input", f"{article.cost.total_input_tokens:,}".replace(",","'")), unsafe_allow_html=True)
-        r4.markdown(_kpi("Tokens output", f"{article.cost.total_output_tokens:,}".replace(",","'")), unsafe_allow_html=True)
+            os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+            slug = _slugify(pl["keyword"])
+            ts   = datetime.now().strftime("%Y%m%d_%H%M")
+            base = os.path.join(config.OUTPUT_DIR, f"{slug}_{ts}")
 
-        st.markdown(f"**🏷️ Meta title :** {article.meta_title}")
-        st.markdown(f"**📝 Meta description :** {article.meta_description}")
+            md_content = format_final_output(article)
+            with open(f"{base}.md", "w", encoding="utf-8") as f:
+                f.write(md_content)
 
-        with st.expander("📐 Plan H2/H3", expanded=False):
-            st.code(article.plan_h2_h3, language="markdown")
+            bundle = {
+                "keyword":          pl["keyword"],
+                "site_url":         pl["site_url"],
+                "meta_title":       pl["meta_title"],
+                "meta_description": pl["meta_description"],
+                "plan":             pl["plan"],
+                "full_article":     pl["full_article"],
+                "word_count":       _count_words(pl["full_article"] or ""),
+                "pass_logs":        [],
+                "generated_at":     datetime.now().isoformat(),
+                "cost":             article.cost.to_dict(),
+                "seo": {
+                    "secondary_keywords": pl["intel_secondary"],
+                    "paa":                pl["intel_paa"],
+                    "cannibalisations":   pl["intel_cannib"],
+                },
+            }
+            json_content = _json.dumps(bundle, ensure_ascii=False, indent=2)
+            with open(f"{base}.json", "w", encoding="utf-8") as f:
+                f.write(json_content)
 
-        with st.expander("📄 Article complet", expanded=True):
-            st.markdown(article.full_article)
+            pl["active"] = False
+            st.success(f"✅ Article enregistré — {bundle['word_count']} mots · Coût réel : {format_usd(article.cost.total_usd)}")
 
-        if intel.cannibalisation_risk:
-            st.warning(f"⚠️ {len(intel.cannibalisation_risk)} page(s) à risque de cannibalisation")
-            for p in intel.cannibalisation_risk:
-                st.caption(f"• {p.url} — pos. {p.avg_position} sur *{p.top_query}*")
+            st.markdown('<div class="section-hdr">Résultats</div>', unsafe_allow_html=True)
+            r1, r2, r3, r4 = st.columns(4)
+            r1.markdown(_kpi("Mots", str(bundle["word_count"])), unsafe_allow_html=True)
+            r2.markdown(_kpi("Coût réel", format_usd(article.cost.total_usd)), unsafe_allow_html=True)
+            r3.markdown(_kpi("Tokens in", f"{article.cost.total_input_tokens:,}"), unsafe_allow_html=True)
+            r4.markdown(_kpi("Tokens out", f"{article.cost.total_output_tokens:,}"), unsafe_allow_html=True)
 
-        d1, d2 = st.columns(2)
-        d1.download_button("⬇️ Télécharger .md", md_content, f"{slug}_{ts}.md", "text/markdown", use_container_width=True)
-        d2.download_button("⬇️ Télécharger .json", json_content, f"{slug}_{ts}.json", "application/json", use_container_width=True)
+            st.markdown(f"**🏷️ Meta title :** {pl['meta_title']}")
+            st.markdown(f"**📝 Meta description :** {pl['meta_description']}")
+
+            if pl["intel_cannib"]:
+                st.warning(f"⚠️ {len(pl['intel_cannib'])} risque(s) de cannibalisation")
+                for url in pl["intel_cannib"]:
+                    st.caption(f"• {url}")
+
+            with st.expander("📐 Plan H2/H3", expanded=False):
+                st.code(pl["plan"], language="markdown")
+            with st.expander("📄 Article complet", expanded=True):
+                st.markdown(pl["full_article"])
+
+            d1, d2, d3 = st.columns(3)
+            d1.download_button("⬇️ .md", md_content, f"{slug}_{ts}.md",
+                               "text/markdown", use_container_width=True)
+            d2.download_button("⬇️ .json", json_content, f"{slug}_{ts}.json",
+                               "application/json", use_container_width=True)
+            if d3.button("✍️ Nouvelle génération", use_container_width=True):
+                st.session_state.pl = None
+                st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
