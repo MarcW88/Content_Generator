@@ -146,37 +146,6 @@ Règles absolues :
 - Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
 """
 
-ARTICLE_SECTION_PROMPT = """\
-Voici le briefing validé à suivre EXACTEMENT :
-
----BRIEFING---
-{briefing}
----FIN BRIEFING---
-
-Ta mission : rédiger la section suivante de l'article en respectant
-scrupuleusement ce briefing.
-
-Section à rédiger :
-{section_spec}
-
-IMPORTANT : Suis TOUTES les consignes du briefing (tonalité, style, positionnement)
-mais ton OUTPUT ne doit contenir QUE le contenu de l'article basé sur le plan de rédaction.
-N'inclus PAS les sections du briefing (CTA, angle différenciant, etc.) dans ta réponse.
-
-Principe GEO / AEO obligatoire :
-Cette section doit répondre de manière explicite et complète à une
-intention de recherche précise. Commence par une phrase-réponse directe
-(« la réponse courte d'abord »), puis développe.
-
-Règles absolues :
-- Pas d'emoji dans le texte
-- Pas de majuscule à chaque mot
-- Phrases naturelles et fluides, sans sur-optimisation du mot-clé
-- Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
-- Rédige UNIQUEMENT cette section, pas l'article complet
-- OUTPUT : uniquement le contenu de l'article, pas de sections du briefing
-"""
-
 
 # ── Passe Méta + Révision ──────────────────────────────────────────────────────
 
@@ -408,6 +377,10 @@ Section à rédiger :
 IMPORTANT : Suis TOUTES les consignes du briefing (tonalité, style, positionnement)
 mais ton OUTPUT ne doit contenir QUE le contenu de l'article basé sur le plan de rédaction.
 N'inclus PAS les sections du briefing (CTA, angle différenciant, etc.) dans ta réponse.
+
+RESPECTE LA LONGUEUR CIBLE spécifiée dans le briefing (généralement 1200-1800 mots).
+Ne répète PAS les informations déjà couvertes dans les sections précédentes.
+Sois concis et va droit au but sans développements superflus.
 
 Principe GEO / AEO obligatoire :
 Cette section doit répondre de manière explicite et complète à une
