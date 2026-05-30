@@ -179,12 +179,33 @@ st.markdown("""
     background: #f3f4f6 !important;
   }
 
-  /* Primary button */
-  .stButton > button[kind="primary"] {
-    background: #4f6ef7 !important; border-color: #4f6ef7 !important;
-    color: #fff !important; font-weight: 700 !important; border-radius: 8px !important;
+  /* ── All Streamlit buttons (correct data-testid selectors) ─────────────── */
+  button[data-testid="baseButton-primary"] {
+    background: #0f172a !important; color: #fff !important;
+    border: none !important; border-radius: 6px !important;
+    font-size: 13px !important; font-weight: 600 !important;
+    letter-spacing: -.1px !important;
   }
-  .stButton > button[kind="primary"]:hover { background: #3b55e0 !important; }
+  button[data-testid="baseButton-primary"]:hover {
+    background: #1e293b !important;
+  }
+  button[data-testid="baseButton-secondary"] {
+    background: transparent !important; color: #6b7280 !important;
+    border: 1px solid #e5e7eb !important; border-radius: 6px !important;
+    font-size: 13px !important; font-weight: 500 !important;
+  }
+  button[data-testid="baseButton-secondary"]:hover {
+    background: #f9fafb !important; color: #0f172a !important;
+    border-color: #d1d5db !important;
+  }
+
+  /* ── Nav brand ──────────────────────────────────────────────────────────── */
+  .nav-brand {
+    font-size: 15px; font-weight: 800; color: #0f172a;
+    letter-spacing: -.4px; padding: 10px 0; display: inline-block;
+  }
+  .nav-brand span { color: #2563eb; }
+  .nav-divider { border: none; border-top: 1px solid #f0f0f0; margin: 4px 0 28px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -239,25 +260,24 @@ def _kpi(label: str, value: str, sub: str = "") -> str:
     )
 
 def _nav():
-    pages  = [("dashboard","📊 Dashboard"), ("generate","✍️ Générer"),
-              ("library","📚 Bibliothèque"), ("settings","⚙️ Paramètres")]
-    items  = ""
-    for key, label in pages:
-        cls = "nav-item active" if st.session_state.page == key else "nav-item"
-        items += f'<span class="{cls}" id="nav-{key}">{label}</span>'
-    st.markdown(
-        f'<div class="nav-bar">'
-        f'  <div class="nav-brand">✍️ <span>Content</span>Agent</div>'
-        f'  <div class="nav-items">{items}</div>'
-        f'</div>',
+    pages = [
+        ("dashboard", "Dashboard"),
+        ("generate",  "Générer"),
+        ("library",   "Bibliothèque"),
+        ("settings",  "Paramètres"),
+    ]
+    brand_col, c1, c2, c3, c4 = st.columns([4, 1, 1, 1, 1])
+    brand_col.markdown(
+        '<div class="nav-brand">Content<span>Agent</span></div>',
         unsafe_allow_html=True,
     )
-    cols = st.columns(len(pages))
-    for i, (key, label) in enumerate(pages):
-        if cols[i].button(label, key=f"nav_btn_{key}", use_container_width=True,
-                          type="primary" if st.session_state.page == key else "secondary"):
+    for col, (key, label) in zip([c1, c2, c3, c4], pages):
+        active = st.session_state.page == key
+        if col.button(label, key=f"nav_{key}", use_container_width=True,
+                      type="primary" if active else "secondary"):
             st.session_state.page = key
             st.rerun()
+    st.markdown('<hr class="nav-divider">', unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
