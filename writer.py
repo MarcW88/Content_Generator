@@ -267,20 +267,31 @@ Voici le résumé du briefing établi précédemment :
 
 {context_summary}
 
+Voici le plan de rédaction déjà généré (NE PAS REPRENDRE ces sections) :
+
+{previous_content}
+
 Ton rôle :
 Continue le plan de rédaction structuré à partir de là où il s'est arrêté.
+
+IMPORTANT : Tu dois CONTINUER le plan existant, PAS créer un nouveau plan.
+Si le plan précédent contenait des sections H2/H3, continue avec les sections suivantes logiques.
+NE REPETE PAS le header ## Plan de Rédaction.
+NE REPETE PAS les sections H2/H3 déjà écrites ci-dessus.
+NE crée PAS une nouvelle Introduction ou une nouvelle structure complète.
 
 À générer (en markdown) :
 Continue le plan de rédaction structuré H2 / H3 où chaque section précise
 l'intention de recherche spécifique à laquelle elle répond
 (ex. : « — intention : comprendre le coût »)
-NE REPETE PAS le header ## Plan de Rédaction, continue directement avec le contenu.
+Continue directement avec le contenu manquant du plan.
 
 Règles absolues :
 - Pas d'emoji dans le texte
 - Pas de majuscule à chaque mot des titres
 - Phrases naturelles et fluides
 - NE JAMAIS répéter les headers déjà écrits
+- NE JAMAIS créer une nouvelle structure de plan complète
 
 Retourne UNIQUEMENT la continuation du plan de rédaction (sans header ## Plan de Rédaction).
 """
@@ -465,12 +476,16 @@ def generate_chunked_briefing(
     # Part 2b: Plan de Rédaction (3 mandatory calls, 6000 tokens total)
     part2b_parts = []
     seen_headers = set()
+    previous_plan_content = ""
     for i in range(3):
         logger.info("[ChunkedBriefing] Part 2b.%d — Plan de Rédaction", i + 1)
         if i == 0:
             p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
         else:
-            p2b = BRIEFING_PART2_PLAN_CONTINUATION.format(context_summary=summary2a)
+            p2b = BRIEFING_PART2_PLAN_CONTINUATION.format(
+                context_summary=summary2a,
+                previous_content=previous_plan_content
+            )
         part2b_chunk, in2b, out2b = _call_claude(system, p2b, max_tokens=2000)
         # Post-process: remove duplicate headers
         if i > 0:
@@ -491,6 +506,7 @@ def generate_chunked_briefing(
             for match in re.finditer(r'^(#{2,3})\s+(.+)$', part2b_chunk, re.MULTILINE):
                 seen_headers.add(match.group(2).strip().lower())
         part2b_parts.append(part2b_chunk)
+        previous_plan_content = "\n\n".join(part2b_parts)
         total_in += in2b
         total_out += out2b
     part2b = "\n\n".join(part2b_parts)
