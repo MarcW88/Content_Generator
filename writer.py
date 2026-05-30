@@ -472,10 +472,10 @@ def generate_chunked_briefing(
     # Summary for next call
     summary2a = _build_context_summary(part1 + "\n\n" + part2a, max_words=120)
 
-    # Part 2b: Plan de Rédaction (single call, 4000 tokens for flexibility)
+    # Part 2b: Plan de Rédaction (single call, 8000 tokens for completeness)
     logger.info("[ChunkedBriefing] Part 2b — Plan de Rédaction")
     p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
-    part2b, in2b, out2b = _call_claude(system, p2b, max_tokens=4000)
+    part2b, in2b, out2b = _call_claude(system, p2b, max_tokens=8000)
     parts.append(part2b)
     total_in += in2b
     total_out += out2b
