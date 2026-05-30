@@ -221,41 +221,65 @@ Retourne UNIQUEMENT la partie suivante du briefing (en markdown) :
 [Angle différenciant]
 """
 
-BRIEFING_PART2_STRUCTURE = """\
+BRIEFING_PART2_INTENTION = """\
 Voici le contexte et le positionnement établis précédemment :
 
 {context_summary}
 
-{continuation_instruction}
-
 Ton rôle :
-En t'appuyant sur ce contexte, rédige la structure détaillée de la page :
+En t'appuyant sur ce contexte, définis l'intention de recherche et les points clés.
 
+À générer (en markdown, section ## Intention & Points Clés) :
 1. Intention de recherche détectée et ses implications éditoriales
-
 2. Points clés incontournables à couvrir
-
-3. Plan de rédaction structuré H2 / H3 où chaque section précise
-   l'intention de recherche spécifique à laquelle elle répond
-   (ex. : « — intention : comprendre le coût »)
-
-4. Recommandations de tonalité et de style adaptées au type de page
-
-5. Longueur cible : 1 200 à 1 800 mots
 
 Règles absolues :
 - Pas d'emoji dans le texte
 - Pas de majuscule à chaque mot des titres
 - Phrases naturelles et fluides
-- SI c'est une continuation : NE JAMAIS répéter les headers déjà écrits, continue directement avec le contenu manquant
 
-Retourne UNIQUEMENT la partie suivante du briefing (en markdown) :
-## Structure & Guidelines
-[Intention de recherche]
-[Points clés]
-[Plan H2/H3 avec intentions]
-[Tonalité & style]
-[Longueur cible]
+Retourne UNIQUEMENT la section ## Intention & Points Clés complète.
+"""
+
+BRIEFING_PART2_PLAN = """\
+Voici le résumé du briefing établi précédemment :
+
+{context_summary}
+
+Ton rôle :
+En t'appuyant sur ce contexte, rédige le plan de rédaction structuré.
+
+À générer (en markdown, section ## Plan de Rédaction) :
+Plan de rédaction structuré H2 / H3 où chaque section précise
+l'intention de recherche spécifique à laquelle elle répond
+(ex. : « — intention : comprendre le coût »)
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres
+- Phrases naturelles et fluides
+
+Retourne UNIQUEMENT la section ## Plan de Rédaction complète.
+"""
+
+BRIEFING_PART2_TONALITY = """\
+Voici le résumé du briefing établi précédemment :
+
+{context_summary}
+
+Ton rôle :
+En t'appuyant sur ce contexte, définis les recommandations de tonalité et de style.
+
+À générer (en markdown, section ## Tonalité & Style) :
+1. Recommandations de tonalité et de style adaptées au type de page
+2. Longueur cible : 1 200 à 1 800 mots
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres
+- Phrases naturelles et fluides
+
+Retourne UNIQUEMENT la section ## Tonalité & Style complète.
 """
 
 BRIEFING_PART3_SEO_KEYWORDS = """\
@@ -404,19 +428,38 @@ def generate_chunked_briefing(
     # Summary for next calls
     summary1 = _build_context_summary(part1, max_words=100)
 
-    # Part 2: Structure & Guidelines (single call with higher token limit)
-    logger.info("[ChunkedBriefing] Part 2 — Structure & Guidelines")
-    p2 = BRIEFING_PART2_STRUCTURE.format(
-        context_summary=summary1,
-        continuation_instruction="",
-    )
-    part2, in2, out2 = _call_claude(system, p2, max_tokens=4000)
-    parts.append(part2)
-    total_in += in2
-    total_out += out2
+    # Part 2a: Intention & Points Clés
+    logger.info("[ChunkedBriefing] Part 2a — Intention & Points Clés")
+    p2a = BRIEFING_PART2_INTENTION.format(context_summary=summary1)
+    part2a, in2a, out2a = _call_claude(system, p2a, max_tokens=2000)
+    parts.append(part2a)
+    total_in += in2a
+    total_out += out2a
 
     # Summary for next call
-    summary2 = _build_context_summary(part1 + "\n\n" + part2, max_words=180)
+    summary2a = _build_context_summary(part1 + "\n\n" + part2a, max_words=120)
+
+    # Part 2b: Plan de Rédaction
+    logger.info("[ChunkedBriefing] Part 2b — Plan de Rédaction")
+    p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
+    part2b, in2b, out2b = _call_claude(system, p2b, max_tokens=2000)
+    parts.append(part2b)
+    total_in += in2b
+    total_out += out2b
+
+    # Summary for next call
+    summary2b = _build_context_summary(part1 + "\n\n" + part2a + "\n\n" + part2b, max_words=150)
+
+    # Part 2c: Tonalité & Style
+    logger.info("[ChunkedBriefing] Part 2c — Tonalité & Style")
+    p2c = BRIEFING_PART2_TONALITY.format(context_summary=summary2b)
+    part2c, in2c, out2c = _call_claude(system, p2c, max_tokens=2000)
+    parts.append(part2c)
+    total_in += in2c
+    total_out += out2c
+
+    # Summary for next call
+    summary2 = _build_context_summary(part1 + "\n\n" + part2a + "\n\n" + part2b + "\n\n" + part2c, max_words=180)
 
     # Part 3a: SEO Keywords & Maillage
     logger.info("[ChunkedBriefing] Part 3a — SEO Keywords & Maillage")
