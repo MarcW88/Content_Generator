@@ -31,181 +31,59 @@ logging.basicConfig(level=logging.INFO,
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
-
-  /* ── Reset & base ─────────────────────────────────────────────────────────── */
+  /* Hide sidebar */
   [data-testid="collapsedControl"] { display: none !important; }
   section[data-testid="stSidebar"]  { display: none !important; }
 
-  .stApp {
-    background: #ffffff;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    color: #1a1a2e;
-  }
-  .stApp p, .stApp li { color: #374151 !important; font-size: 14px; line-height: 1.65; }
-  .stApp label        { color: #374151 !important; font-size: 13px; font-weight: 500; }
-  .stApp h1 { color: #0f172a !important; font-size: 24px; font-weight: 800; letter-spacing: -.5px; margin-bottom: 4px; }
-  .stApp h2 { color: #0f172a !important; font-size: 17px; font-weight: 700; letter-spacing: -.2px; }
-  .stApp h3 { color: #374151 !important; font-size: 14px; font-weight: 600; }
+  /* Nav brand label */
+  .nav-brand { font-size: 15px; font-weight: 800; letter-spacing: -.3px;
+               padding: 8px 0; display: inline-block; }
+  .nav-brand span { color: #0f172a; }
 
-  /* ── Inputs ──────────────────────────────────────────────────────────────── */
-  [data-testid="stTextInput"] input {
-    background: #f9fafb !important; border: 1px solid #e5e7eb !important;
-    border-radius: 6px !important; font-size: 13px !important; color: #0f172a !important;
-    transition: border-color .15s, box-shadow .15s;
-  }
-  [data-testid="stTextInput"] input:focus {
-    border-color: #2563eb !important; background: #fff !important;
-    box-shadow: 0 0 0 3px rgba(37,99,235,.08) !important;
-  }
-  [data-testid="stSelectbox"] > div > div {
-    background: #f9fafb !important; border: 1px solid #e5e7eb !important;
-    border-radius: 6px !important; font-size: 13px !important;
-  }
-
-  /* ── Buttons ─────────────────────────────────────────────────────────────── */
-  button[kind="primary"] {
-    background: #2563eb !important; color: #fff !important;
-    border: none !important; border-radius: 6px !important;
-    font-size: 13px !important; font-weight: 600 !important;
-    padding: 9px 18px !important; letter-spacing: -.1px !important;
-    transition: background .15s !important;
-  }
-  button[kind="primary"]:hover  { background: #1d4ed8 !important; }
-  button[kind="secondary"] {
-    background: #fff !important; color: #374151 !important;
-    border: 1px solid #d1d5db !important; border-radius: 6px !important;
-    font-size: 13px !important; font-weight: 500 !important;
-  }
-  button[kind="secondary"]:hover { background: #f9fafb !important; border-color: #9ca3af !important; }
-
-  /* ── Top nav ──────────────────────────────────────────────────────────────── */
-  .nav-bar {
-    display: flex; align-items: center; justify-content: space-between;
-    background: #fff; border-bottom: 1px solid #f0f0f0;
-    padding: 0 40px; height: 56px; margin-bottom: 32px;
-  }
-  .nav-brand { font-size: 14px; font-weight: 800; color: #0f172a; letter-spacing: -.3px; }
-  .nav-brand span { color: #2563eb; }
-  .nav-links { display: flex; gap: 2px; }
-  .nav-link {
-    padding: 5px 12px; border-radius: 5px; font-size: 13px; font-weight: 500;
-    color: #6b7280; cursor: pointer; transition: all .12s;
-  }
-  .nav-link:hover  { background: #f9fafb; color: #0f172a; }
-  .nav-link.active { color: #2563eb; font-weight: 600; }
-
-  /* ── KPI cards ───────────────────────────────────────────────────────────── */
-  .kpi-card {
-    background: #fafafa; border: 1px solid #f0f0f0; border-radius: 10px;
-    padding: 18px 20px;
-  }
-  .kpi-label { color: #9ca3af; font-size: 11px; font-weight: 600;
-               letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
-  .kpi-value { color: #0f172a; font-size: 26px; font-weight: 800; line-height: 1; }
-  .kpi-sub   { color: #2563eb; font-size: 12px; font-weight: 500; margin-top: 5px; }
-
-  /* ── Pipeline stepper ────────────────────────────────────────────────────── */
-  .pipeline-wrapper {
-    background: #fff; border: 1px solid #f0f0f0; border-radius: 12px;
-    padding: 24px 28px; margin: 12px 0 28px;
-  }
-  .pipeline-title {
-    font-size: 11px; font-weight: 600; color: #9ca3af;
-    text-transform: uppercase; letter-spacing: .1em; margin-bottom: 18px;
-  }
-  .step-row { display: flex; gap: 8px; align-items: stretch; }
-  .step-box {
-    flex: 1; background: #fafafa; border: 1px solid #f0f0f0;
-    border-radius: 8px; padding: 14px 10px; text-align: center;
-    transition: all .2s ease;
-  }
-  .step-box.running {
-    background: #eff6ff; border-color: #2563eb;
-    box-shadow: 0 0 0 2px rgba(37,99,235,.1);
-    animation: pulse-step 1.8s ease-in-out infinite;
-  }
+  /* Pipeline stepper — custom HTML component only */
+  .pipeline-wrapper { border: 1px solid #e5e7eb; border-radius: 10px;
+                      padding: 20px 24px; margin: 8px 0 24px; }
+  .pipeline-title   { font-size: 11px; font-weight: 600; color: #9ca3af;
+                      text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; }
+  .step-row         { display: flex; gap: 8px; }
+  .step-box         { flex: 1; border: 1px solid #e5e7eb; border-radius: 8px;
+                      padding: 12px 8px; text-align: center; }
+  .step-box.running { border-color: #0f172a; background: #f8fafc;
+                      animation: pulse-step 1.8s ease-in-out infinite; }
   @keyframes pulse-step {
-    0%,100% { box-shadow: 0 0 0 2px rgba(37,99,235,.10); }
-    50%      { box-shadow: 0 0 0 4px rgba(37,99,235,.05); }
+    0%,100% { box-shadow: 0 0 0 2px rgba(15,23,42,.08); }
+    50%      { box-shadow: 0 0 0 4px rgba(15,23,42,.04); }
   }
-  .step-box.done  { background: #f0fdf4; border-color: #86efac; }
-  .step-box.error { background: #fef2f2; border-color: #fca5a5; }
-  .step-num   { font-size: 10px; font-weight: 600; color: #d1d5db;
-                text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
-  .step-box.running .step-num { color: #2563eb; }
+  .step-box.done    { border-color: #86efac; background: #f0fdf4; }
+  .step-box.error   { border-color: #fca5a5; background: #fef2f2; }
+  .step-num    { font-size: 10px; font-weight: 600; color: #d1d5db;
+                 text-transform: uppercase; margin-bottom: 6px; }
+  .step-box.running .step-num { color: #0f172a; }
   .step-box.done    .step-num { color: #16a34a; }
   .step-box.error   .step-num { color: #dc2626; }
-  .step-icon  { font-size: 22px; margin-bottom: 5px; }
-  .step-name  { font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 2px; }
-  .step-detail{ font-size: 11px; color: #9ca3af; min-height: 14px; }
-  .step-cost  { font-size: 11px; color: #16a34a; font-weight: 600; margin-top: 3px; }
+  .step-icon   { font-size: 20px; margin-bottom: 4px; }
+  .step-name   { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .step-detail { font-size: 11px; color: #9ca3af; min-height: 14px; }
+  .step-cost   { font-size: 11px; color: #16a34a; font-weight: 600; margin-top: 2px; }
 
-  /* ── Cost badge ──────────────────────────────────────────────────────────── */
-  .cost-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: #f0fdf4; border: 1px solid #d1fae5;
-    border-radius: 20px; padding: 4px 12px;
-    font-size: 12px; font-weight: 600; color: #15803d;
-  }
+  /* Cost badge */
+  .cost-badge { display: inline-flex; align-items: center; gap: 4px;
+                background: #f0fdf4; border: 1px solid #d1fae5;
+                border-radius: 20px; padding: 3px 10px;
+                font-size: 12px; font-weight: 600; color: #15803d; }
 
-  /* ── Section header ──────────────────────────────────────────────────────── */
-  .section-hdr {
-    color: #9ca3af; font-size: 11px; font-weight: 600; letter-spacing: .1em;
-    text-transform: uppercase; border-bottom: 1px solid #f3f4f6;
-    padding-bottom: 8px; margin: 36px 0 20px;
-  }
+  /* Section header */
+  .section-hdr { font-size: 11px; font-weight: 600; color: #9ca3af;
+                 letter-spacing: .08em; text-transform: uppercase;
+                 border-bottom: 1px solid #f3f4f6; padding-bottom: 6px;
+                 margin: 28px 0 16px; }
 
-  /* ── API status chips ────────────────────────────────────────────────────── */
-  .profile-chip {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: #fafafa; border: 1px solid #e5e7eb; border-radius: 6px;
-    padding: 5px 12px; font-size: 12px; color: #374151; margin: 3px;
-    font-weight: 500;
-  }
-  .chip-green { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
-  .chip-red   { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
-
-  /* Dataframe + expanders */
-  [data-testid="stDataFrame"] { background: #fff; border-radius: 10px; }
-  details > summary { color: #1a1d2e !important; font-weight: 600; }
-
-  /* Download buttons */
-  div[data-testid="stDownloadButton"] button {
-    background: #ffffff !important; border: 1px solid #d1d5db !important;
-    color: #374151 !important; font-weight: 600 !important;
-  }
-  div[data-testid="stDownloadButton"] button:hover {
-    background: #f3f4f6 !important;
-  }
-
-  /* ── All Streamlit buttons (correct data-testid selectors) ─────────────── */
-  button[data-testid="baseButton-primary"] {
-    background: #0f172a !important; color: #fff !important;
-    border: none !important; border-radius: 6px !important;
-    font-size: 13px !important; font-weight: 600 !important;
-    letter-spacing: -.1px !important;
-  }
-  button[data-testid="baseButton-primary"]:hover {
-    background: #1e293b !important;
-  }
-  button[data-testid="baseButton-secondary"] {
-    background: transparent !important; color: #6b7280 !important;
-    border: 1px solid #e5e7eb !important; border-radius: 6px !important;
-    font-size: 13px !important; font-weight: 500 !important;
-  }
-  button[data-testid="baseButton-secondary"]:hover {
-    background: #f9fafb !important; color: #0f172a !important;
-    border-color: #d1d5db !important;
-  }
-
-  /* ── Nav brand ──────────────────────────────────────────────────────────── */
-  .nav-brand {
-    font-size: 15px; font-weight: 800; color: #0f172a;
-    letter-spacing: -.4px; padding: 10px 0; display: inline-block;
-  }
-  .nav-brand span { color: #2563eb; }
-  .nav-divider { border: none; border-top: 1px solid #f0f0f0; margin: 4px 0 28px; }
+  /* API status chips */
+  .profile-chip { display: inline-flex; align-items: center; gap: 4px;
+                  border: 1px solid #e5e7eb; border-radius: 6px;
+                  padding: 4px 10px; font-size: 12px; margin: 2px; }
+  .chip-green   { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+  .chip-red     { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -980,10 +858,10 @@ elif page == "generate":
 
             st.markdown('<div class="section-hdr">Résultats</div>', unsafe_allow_html=True)
             r1, r2, r3, r4 = st.columns(4)
-            r1.markdown(_kpi("Mots", str(bundle["word_count"])), unsafe_allow_html=True)
-            r2.markdown(_kpi("Coût réel", format_usd(article.cost.total_usd)), unsafe_allow_html=True)
-            r3.markdown(_kpi("Tokens in", f"{article.cost.total_input_tokens:,}"), unsafe_allow_html=True)
-            r4.markdown(_kpi("Tokens out", f"{article.cost.total_output_tokens:,}"), unsafe_allow_html=True)
+            r1.metric("Mots", bundle["word_count"])
+            r2.metric("Coût réel", format_usd(article.cost.total_usd))
+            r3.metric("Tokens in", f"{article.cost.total_input_tokens:,}")
+            r4.metric("Tokens out", f"{article.cost.total_output_tokens:,}")
 
             st.markdown(f"**Meta title :** {pl['meta_title']}")
             st.markdown(f"**Meta description :** {pl['meta_description']}")
