@@ -667,11 +667,10 @@ def _call_claude(system: str, user_prompt: str,
         system     = system,
         messages   = [{"role": "user", "content": user_prompt}],
     )
-    return (
-        message.content[0].text.strip(),
-        message.usage.input_tokens,
-        message.usage.output_tokens,
-    )
+    text = message.content[0].text.strip() if message.content else ""
+    in_tokens = message.usage.input_tokens if hasattr(message.usage, 'input_tokens') else 0
+    out_tokens = message.usage.output_tokens if hasattr(message.usage, 'output_tokens') else 0
+    return (text, in_tokens, out_tokens)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
