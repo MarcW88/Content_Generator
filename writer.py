@@ -378,7 +378,8 @@ IMPORTANT : Suis TOUTES les consignes du briefing (tonalité, style, positionnem
 mais ton OUTPUT ne doit contenir QUE le contenu de l'article basé sur le plan de rédaction.
 N'inclus PAS les sections du briefing (CTA, angle différenciant, etc.) dans ta réponse.
 
-RESPECTE LA LONGUEUR CIBLE spécifiée dans le briefing (généralement 1200-1800 mots).
+RESPECTE LA LONGUEUR CIBLE spécifiée dans le briefing (généralement 1200-1800 mots pour l'article complet).
+Pour cette section, vise environ 200-300 mots maximum.
 Ne répète PAS les informations déjà couvertes dans les sections précédentes.
 Sois concis et va droit au but sans développements superflus.
 
@@ -606,7 +607,7 @@ def generate_article_by_sections(
         if continuation:
             prompt = f"{continuation}\n\n{prompt}"
 
-        section, in_t, out_t = _call_claude(system, prompt, max_tokens=12000)
+        section, in_t, out_t = _call_claude(system, prompt, max_tokens=2500)
 
         # Post-process: remove duplicate headers
         if idx > 1:
