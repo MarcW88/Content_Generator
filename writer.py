@@ -146,6 +146,32 @@ Règles absolues :
 - Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
 """
 
+ARTICLE_SECTION_PROMPT = """\
+Voici le briefing validé à suivre EXACTEMENT :
+
+---BRIEFING---
+{briefing}
+---FIN BRIEFING---
+
+Ta mission : rédiger la section suivante de l'article en respectant
+scrupuleusement ce briefing.
+
+Section à rédiger :
+{section_spec}
+
+Principe GEO / AEO obligatoire :
+Cette section doit répondre de manière explicite et complète à une
+intention de recherche précise. Commence par une phrase-réponse directe
+(« la réponse courte d'abord »), puis développe.
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot
+- Phrases naturelles et fluides, sans sur-optimisation du mot-clé
+- Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
+- Rédige UNIQUEMENT cette section, pas l'article complet
+"""
+
 
 # ── Passe Méta + Révision ──────────────────────────────────────────────────────
 
