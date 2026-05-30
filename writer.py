@@ -404,47 +404,16 @@ def generate_chunked_briefing(
     # Summary for next calls
     summary1 = _build_context_summary(part1, max_words=100)
 
-    # Part 2: Structure & Guidelines (3 calls, 6000 tokens total)
-    part2_parts = []
-    seen_headers = set()
-    continuation = ""
-    for i in range(3):
-        logger.info("[ChunkedBriefing] Part 2.%d — Structure & Guidelines", i + 1)
-        p2 = BRIEFING_PART2_STRUCTURE.format(
-            context_summary=summary1,
-            continuation_instruction=continuation,
-        )
-        part2_chunk, in2, out2 = _call_claude(system, p2, max_tokens=2000)
-        # Post-process: remove duplicate headers in continuation chunks
-        if i > 0:
-            import re
-            lines = part2_chunk.split('\n')
-            filtered_lines = []
-            for line in lines:
-                # Check if line is a header (## or ###)
-                header_match = re.match(r'^(#{2,3})\s+(.+)$', line)
-                if header_match:
-                    header_text = header_match.group(2).strip().lower()
-                    if header_text in seen_headers:
-                        continue  # Skip duplicate header
-                    seen_headers.add(header_text)
-                filtered_lines.append(line)
-            part2_chunk = '\n'.join(filtered_lines)
-        else:
-            # First chunk: track all headers
-            import re
-            for match in re.finditer(r'^(#{2,3})\s+(.+)$', part2_chunk, re.MULTILINE):
-                seen_headers.add(match.group(2).strip().lower())
-        part2_parts.append(part2_chunk)
-        total_in += in2
-        total_out += out2
-        # Prepare continuation instruction for next call
-        if i == 0:
-            continuation = f"CONTINUE the section ## Structure & Guidelines from where it stopped. DO NOT repeat the section header ## Structure & Guidelines or any subsection headers that were already written. Continue directly with the next bullet point or paragraph."
-        else:
-            continuation = f"CONTINUE the section ## Structure & Guidelines from where it stopped. DO NOT repeat any headers or subsections that were already written. Continue directly with the next bullet point or paragraph."
-    part2 = "\n\n".join(part2_parts)
+    # Part 2: Structure & Guidelines (single call with higher token limit)
+    logger.info("[ChunkedBriefing] Part 2 — Structure & Guidelines")
+    p2 = BRIEFING_PART2_STRUCTURE.format(
+        context_summary=summary1,
+        continuation_instruction="",
+    )
+    part2, in2, out2 = _call_claude(system, p2, max_tokens=4000)
     parts.append(part2)
+    total_in += in2
+    total_out += out2
 
     # Summary for next call
     summary2 = _build_context_summary(part1 + "\n\n" + part2, max_words=180)
