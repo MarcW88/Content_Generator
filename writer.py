@@ -159,6 +159,10 @@ scrupuleusement ce briefing.
 Section à rédiger :
 {section_spec}
 
+IMPORTANT : Suis TOUTES les consignes du briefing (tonalité, style, positionnement)
+mais ton OUTPUT ne doit contenir QUE le contenu de l'article basé sur le plan de rédaction.
+N'inclus PAS les sections du briefing (CTA, angle différenciant, etc.) dans ta réponse.
+
 Principe GEO / AEO obligatoire :
 Cette section doit répondre de manière explicite et complète à une
 intention de recherche précise. Commence par une phrase-réponse directe
@@ -170,6 +174,7 @@ Règles absolues :
 - Phrases naturelles et fluides, sans sur-optimisation du mot-clé
 - Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
 - Rédige UNIQUEMENT cette section, pas l'article complet
+- OUTPUT : uniquement le contenu de l'article, pas de sections du briefing
 """
 
 
@@ -547,21 +552,21 @@ def extract_h2_sections(briefing: str) -> list[str]:
 
 
 def filter_briefing_for_content(briefing: str) -> str:
-    """Filter briefing to keep ONLY content-relevant sections for article generation."""
+    """Filter briefing to remove only SEO/technical sections, keep content and style sections for model context."""
     import re
     lines = briefing.split('\n')
     filtered = []
-    skip_section = True  # Skip by default, only include allowed sections
-    allowed_sections = ['contexte', 'positionnement', 'intention', 'points clés', 'plan de rédaction']
+    skip_section = False
+    skip_keywords = ['seo', 'maillage', 'métas', 'checklist', 'mots-clés']
     for line in lines:
         header_match = re.match(r'^##\s+(.+)$', line, re.IGNORECASE)
         if header_match:
             header_text = header_match.group(1).lower()
-            if any(kw in header_text for kw in allowed_sections):
-                skip_section = False
-            else:
+            if any(kw in header_text for kw in skip_keywords):
                 skip_section = True
                 continue
+            else:
+                skip_section = False
         if not skip_section:
             filtered.append(line)
     return '\n'.join(filtered)
