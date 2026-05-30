@@ -293,45 +293,31 @@ Voici le résumé du briefing établi précédemment :
 
 {context_summary}
 
-Voici le plan de rédaction déjà généré (NE PAS REPRENDRE ces sections) :
-
-{previous_content}
-
-Sections H2 déjà présentes dans le plan (NE PAS REPRENDRE) :
+Sections H2 déjà générées dans le plan (NE PAS REPRENDRE) :
 {existing_sections}
 
 Ton rôle :
-Continue le plan de rédaction structuré à partir de là où il s'est arrêté.
+Continue le plan de rédaction en ajoutant 3-4 nouvelles sections H2/H3 après celles déjà écrites.
 
-CRITIQUE : Tu dois CONTINUER le plan existant, PAS créer un nouveau plan.
-Le plan de rédaction doit être un SEUL document cohérent, PAS plusieurs structures séparées.
-NE REPETE PAS le header ## Plan de Rédaction.
-NE REPETE PAS les sections H2/H3 déjà écrites ci-dessus.
-NE crée PAS une nouvelle Introduction, Conclusion, FAQ, Glossaire ou toute autre section déjà présente.
-NE crée PAS une nouvelle structure complète avec ses propres sections.
-
-INSTRUCTION PRÉCISE : Continue le plan en ajoutant les sections H2/H3 suivantes logiques après celles déjà écrites.
-Si le plan contient déjà une Conclusion, ne génère PAS une nouvelle Conclusion.
-Si le plan contient déjà des H2, continue avec les H2 suivants logiques.
-Si le plan est déjà complet (8-12 sections H2), tu peux arrêter sans ajouter plus de sections.
+INSTRUCTIONS STRICTES :
+- Le plan final doit contenir 10-12 sections H2 maximum
+- NE JAMAIS répéter les sections H2 déjà listées ci-dessus
+- NE JAMAIS créer de nouvelle Introduction, Conclusion, FAQ ou Glossaire si elles existent déjà
+- Génère UNIQUEMENT 3-4 nouvelles sections H2/H3 logiques
+- Chaque section doit préciser l'intention de recherche (ex: « — intention : comprendre le coût »)
 
 À générer (en markdown) :
-Continue le plan de rédaction structuré H2 / H3 où chaque section précise
-l'intention de recherche spécifique à laquelle elle répond
-(ex. : « — intention : comprendre le coût »)
-Continue directement avec le contenu manquant du plan.
+Ajoute 3-4 nouvelles sections H2/H3 logiques après celles déjà écrites.
+Format : ## Titre H2\nIntention : ...\n\n### Titre H3\nIntention : ...
 
 Règles absolues :
 - Pas d'emoji dans le texte
 - Pas de majuscule à chaque mot des titres
 - Phrases naturelles et fluides
 - NE JAMAIS répéter les headers déjà écrits
-- NE JAMAIS créer une nouvelle structure de plan complète
-- NE JAMAIS générer de nouvelles sections si elles existent déjà (Introduction, Conclusion, FAQ, Glossaire, etc.)
-- Continue UNIQUEMENT avec de nouvelles sections H2/H3 logiques
-- Le plan doit rester un document unique et cohérent
+- NE JAMAIS générer de nouvelles sections si elles existent déjà
 
-Retourne UNIQUEMENT la continuation du plan de rédaction (sans header ## Plan de Rédaction).
+Retourne UNIQUEMENT les nouvelles sections (sans header ## Plan de Rédaction).
 """
 
 BRIEFING_PART2_TONALITY = """\
@@ -514,7 +500,6 @@ def generate_chunked_briefing(
     # Part 2b: Plan de Rédaction (3 mandatory calls, 6000 tokens total)
     part2b_parts = []
     seen_headers = set()
-    previous_plan_content = ""
     existing_h2_sections = []
     for i in range(3):
         logger.info("[ChunkedBriefing] Part 2b.%d — Plan de Rédaction", i + 1)
@@ -523,11 +508,10 @@ def generate_chunked_briefing(
         else:
             # Extract H2 headers from previous content
             import re
-            h2_matches = re.findall(r'^##\s+(.+)$', previous_plan_content, re.MULTILINE)
+            h2_matches = re.findall(r'^##\s+(.+)$', "\n\n".join(part2b_parts), re.MULTILINE)
             existing_h2_sections = h2_matches
             p2b = BRIEFING_PART2_PLAN_CONTINUATION.format(
                 context_summary=summary2a,
-                previous_content=previous_plan_content,
                 existing_sections="\n".join(f"- {h2}" for h2 in existing_h2_sections)
             )
         part2b_chunk, in2b, out2b = _call_claude(system, p2b, max_tokens=2000)
@@ -550,7 +534,6 @@ def generate_chunked_briefing(
             for match in re.finditer(r'^(#{2,3})\s+(.+)$', part2b_chunk, re.MULTILINE):
                 seen_headers.add(match.group(2).strip().lower())
         part2b_parts.append(part2b_chunk)
-        previous_plan_content = "\n\n".join(part2b_parts)
         total_in += in2b
         total_out += out2b
     part2b = "\n\n".join(part2b_parts)
