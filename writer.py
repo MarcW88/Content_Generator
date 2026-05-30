@@ -628,7 +628,7 @@ def generate_article_by_sections(
         if continuation:
             prompt = f"{continuation}\n\n{prompt}"
 
-        section, in_t, out_t = _call_claude(system, prompt, max_tokens=4000)
+        section, in_t, out_t = _call_claude(system, prompt, max_tokens=12000)
 
         # Post-process: remove duplicate headers
         if idx > 1:
