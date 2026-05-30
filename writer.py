@@ -547,12 +547,15 @@ def extract_h2_sections(briefing: str) -> list[str]:
 
 
 def filter_briefing_for_content(briefing: str) -> str:
-    """Filter briefing to remove technical/SEO parts, keep only content-relevant sections."""
+    """Filter briefing to remove technical/SEO/commercial parts, keep only content-relevant sections."""
     import re
     lines = briefing.split('\n')
     filtered = []
     skip_section = False
-    skip_keywords = ['seo', 'technique', 'maillage', 'métas', 'faq', 'checklist', 'mots-clés']
+    skip_keywords = ['seo', 'technique', 'maillage', 'métas', 'faq', 'checklist', 'mots-clés', 
+                     'angle différenciant', 'opportunités', 'intégration', 'positionnement', 
+                     'appels à l\'action', 'cta', 'données chiffrées', 'nuances', 
+                     'featured snippets', 'maillage interne', 'navigation']
     for line in lines:
         header_match = re.match(r'^##\s+(.+)$', line, re.IGNORECASE)
         if header_match:
