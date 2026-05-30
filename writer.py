@@ -379,7 +379,6 @@ mais ton OUTPUT ne doit contenir QUE le contenu de l'article basé sur le plan d
 N'inclus PAS les sections du briefing (CTA, angle différenciant, etc.) dans ta réponse.
 
 RESPECTE LA LONGUEUR CIBLE spécifiée dans le briefing (généralement 1200-1800 mots pour l'article complet).
-Pour cette section, vise STRICTEMENT {words_per_section_min}-{words_per_section_max} mots maximum. Ne dépasse PAS cette limite.
 Ne répète PAS les informations déjà couvertes dans les sections précédentes.
 Sois concis et va droit au but sans développements superflus.
 Chaque phrase doit apporter de l'information utile, pas de remplissage.
@@ -587,14 +586,6 @@ def generate_article_by_sections(
     else:
         section_chunks = [(h2, 0, 1) for h2 in h2_sections]
 
-    # Calculate dynamic word limit per section based on target 1200-1800 words
-    target_words_min = 1200
-    target_words_max = 1800
-    words_per_section_min = target_words_min // len(section_chunks)
-    words_per_section_max = target_words_max // len(section_chunks)
-    logger.info("[ChunkedArticle] Target: %d-%d words total, %d-%d words per section (%d sections)",
-                target_words_min, target_words_max, words_per_section_min, words_per_section_max, len(section_chunks))
-
     sections = []
     total_in = 0
     total_out = 0
@@ -612,8 +603,6 @@ def generate_article_by_sections(
         prompt = ARTICLE_SECTION_PROMPT.format(
             briefing=filtered_briefing,
             section_spec=section_spec,
-            words_per_section_min=words_per_section_min,
-            words_per_section_max=words_per_section_max,
         )
         if continuation:
             prompt = f"{continuation}\n\n{prompt}"
