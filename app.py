@@ -177,10 +177,10 @@ if page == "dashboard":
     avg_cost       = total_cost / total_articles if total_articles else 0
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(_kpi("Articles générés", str(total_articles)), unsafe_allow_html=True)
-    c2.markdown(_kpi("Mots rédigés", f"{total_words:,}".replace(",","'")), unsafe_allow_html=True)
-    c3.markdown(_kpi("Coût total", format_usd(total_cost), "USD — LLM + SEO"), unsafe_allow_html=True)
-    c4.markdown(_kpi("Coût moyen / article", format_usd(avg_cost)), unsafe_allow_html=True)
+    c1.metric("Articles générés", total_articles)
+    c2.metric("Mots rédigés", f"{total_words:,}".replace(",","'"))
+    c3.metric("Coût total", format_usd(total_cost))
+    c4.metric("Coût moyen / article", format_usd(avg_cost))
 
     if articles:
         st.markdown('<div class="section-hdr">Coût par article (10 derniers)</div>', unsafe_allow_html=True)
@@ -205,7 +205,7 @@ if page == "dashboard":
             })
         st.dataframe(rows, use_container_width=True, hide_index=True)
     else:
-        st.info("Aucun article généré. Va dans **✍️ Générer** pour commencer.")
+        st.info("Aucun article généré. Va dans **Générer** pour commencer.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -220,17 +220,17 @@ elif page == "generate":
     pl = st.session_state.pl
 
     STEPS = [
-        ("Style",    "🎨", "Analyse du ton éditorial"),
-        ("SEO",      "📊", "Données SERP / PAA"),
-        ("Briefing", "📋", "Briefing & plan de rédaction"),
-        ("Article",  "✏️",  "Rédaction de l'article"),
-        ("Métas",    "🔍", "Métas + révision finale"),
+        ("Style",    "—", "Analyse du ton éditorial"),
+        ("SEO",      "—", "Données SERP / PAA"),
+        ("Briefing", "—", "Briefing & plan de rédaction"),
+        ("Article",  "—", "Rédaction de l'article"),
+        ("Métas",    "—", "Métas + révision finale"),
     ]
     PROGRESS = [5, 22, 45, 72, 90]
 
     def _stepper_html(states, details, step_costs):
-        icon_map = {"pending": "○", "running": "◉", "done": "✓", "error": "✗",
-                    "waiting": "⏸"}
+        icon_map = {"pending": "·", "running": ">", "done": "ok", "error": "!",
+                    "waiting": "~"}
         css_map  = {"pending": "", "running": " running", "done": " done",
                     "error": " error", "waiting": " running"}
         boxes = ""
@@ -242,7 +242,6 @@ elif page == "generate":
             boxes += (
                 f'<div class="step-box{cls}">'
                 f'<div class="step-num">{short} {ic}</div>'
-                f'<div class="step-icon">{emoji}</div>'
                 f'<div class="step-name">{name}</div>'
                 f'<div class="step-detail">{details[i]}</div>'
                 f'{cost_s}</div>'
@@ -256,7 +255,7 @@ elif page == "generate":
 
     # ── FORM — aucun pipeline actif ───────────────────────────────────────────
     if not pl or not pl.get("active"):
-        st.markdown("## ✍️ Nouveau contenu")
+        st.markdown("## Nouveau contenu")
 
         col_a, col_b, col_c, col_d = st.columns(4)
         with col_a:
@@ -289,12 +288,12 @@ elif page == "generate":
         opt1, opt2 = st.columns(2)
         with opt1:
             manual = st.checkbox(
-                "✋ Validation manuelle entre chaque étape",
+                "Validation manuelle entre chaque étape",
                 value=True,
                 help="Si coché, l'agent s'arrête après chaque étape pour relire et valider.",
             )
         with opt2:
-            refresh_style = st.checkbox("🔄 Forcer rebuild style profile", value=False)
+            refresh_style = st.checkbox("Forcer rebuild style profile", value=False)
 
         doc_col, links_col = st.columns(2)
         with doc_col:
@@ -325,7 +324,7 @@ elif page == "generate":
             )
 
         launch = st.button(
-            "⚡ Lancer la génération",
+            "Lancer la génération",
             type="primary",
             disabled=not bool(site_url and keyword and country),
         )
@@ -335,7 +334,7 @@ elif page == "generate":
 
         if launch and site_url and keyword and country:
             if not config.ANTHROPIC_API_KEY:
-                st.error("❌ `ANTHROPIC_API_KEY` manquante.")
+                st.error("ANTHROPIC_API_KEY manquante.")
                 st.stop()
             # ── Parse uploaded documents ────────────────────────────────────────
             context_text = ""
@@ -354,7 +353,7 @@ elif page == "generate":
                         context_text = "\n".join(p.text for p in doc.paragraphs)
                     context_text = context_text[:8000]  # cap at 8k chars
                 except Exception as exc:
-                    st.warning(f"⚠️ Impossible de lire le document : {exc}")
+                    st.warning(f"Impossible de lire le document : {exc}")
 
             internal_links_data = None
             if internal_links_file is not None:
@@ -363,7 +362,7 @@ elif page == "generate":
                     internal_links_data = _pd.read_csv(internal_links_file, encoding="utf-8-sig",
                                                        on_bad_lines="skip").head(5000).to_dict("records")
                 except Exception as exc:
-                    st.warning(f"⚠️ CSV maillage non lu : {exc}")
+                    st.warning(f"CSV maillage non lu : {exc}")
 
             st.session_state.pl = {
                 "active":        True,
@@ -408,8 +407,8 @@ elif page == "generate":
 
     # ── PIPELINE ACTIF ────────────────────────────────────────────────────────
     if pl and pl.get("active"):
-        st.markdown(f"## ✍️ Génération — *{pl['keyword']}*")
-        st.caption(f"🌐 {pl['site_url']}   ·   {'✋ Validation manuelle activée' if pl['manual'] else '⚡ Mode automatique'}")
+        st.markdown(f"## Génération — *{pl['keyword']}*")
+        st.caption(f"{pl['site_url']}   ·   {'Validation manuelle activée' if pl['manual'] else 'Mode automatique'}")
 
         stepper_ph   = st.empty()
         progress_ph  = st.empty()
@@ -431,11 +430,11 @@ elif page == "generate":
             step_done = pl["step"] - 1
             st.divider()
             st.markdown(
-                f'<div style="background:#eff3ff;border:2px solid #4f6ef7;border-radius:12px;'
-                f'padding:18px 24px;margin:8px 0 20px">'
-                f'<div style="font-size:14px;font-weight:700;color:#4f6ef7;margin-bottom:4px">'
-                f'⏸ Validation requise — {STEPS[step_done][2]}</div>'
-                f'<div style="font-size:13px;color:#374151">'
+                f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;'
+                f'padding:14px 20px;margin:8px 0 20px">'
+                f'<div style="font-size:13px;font-weight:600;color:#0f172a;margin-bottom:4px">'
+                f'Validation requise — {STEPS[step_done][2]}</div>'
+                f'<div style="font-size:13px;color:#64748b">'
                 f'Relis le résultat ci-dessous puis choisis de continuer ou d\'arrêter.</div>'
                 f'</div>',
                 unsafe_allow_html=True,
@@ -446,7 +445,7 @@ elif page == "generate":
                 pages = p.get("_pages_scraped", [])
                 scraped_n = p.get("_scraped_count", 0)
                 if pages:
-                    st.success(f"✅ {scraped_n} page(s) analysée(s) pour construire le style profile")
+                    st.success(f"{scraped_n} page(s) analysée(s) pour construire le style profile")
                     with st.expander(f"Pages scrapées ({scraped_n})"):
                         for u in pages:
                             st.caption(f"• {u}")
@@ -460,7 +459,7 @@ elif page == "generate":
             elif step_done == 1:
                 intent = pl.get("intel_intent", "")
                 if intent:
-                    st.info(f"🔎 Intention de recherche : **{intent}**")
+                    st.info(f"Intention de recherche : **{intent}**")
                 sec = pl.get("intel_secondary", [])
                 lsi = pl.get("intel_lsi", [])
                 lt  = pl.get("intel_longtail", [])
@@ -480,7 +479,7 @@ elif page == "generate":
                     for q in pl["intel_paa"][:6]:
                         st.caption(f"• {q}")
                 if pl["intel_cannib"]:
-                    st.warning(f"⚠️ {len(pl['intel_cannib'])} risque(s) cannibalisation")
+                    st.warning(f"{len(pl['intel_cannib'])} risque(s) de cannibalisation")
             elif step_done == 2 and pl["briefing"]:
                 wc = _count_words(pl["briefing"])
                 st.caption(f"{wc} mots")
@@ -492,21 +491,21 @@ elif page == "generate":
                 with st.expander("Lire l'article complet", expanded=False):
                     st.markdown(pl["full_article"])
             elif step_done == 4:
-                st.markdown(f"**🏷️ Meta title :** {pl['meta_title']}")
-                st.markdown(f"**📝 Meta description :** {pl['meta_description']}")
+                st.markdown(f"**Meta title :** {pl['meta_title']}")
+                st.markdown(f"**Meta description :** {pl['meta_description']}")
                 geo = pl.get("geo_check", [])
                 if geo:
                     with st.expander(f"Vérification GEO ({len(geo)} sections)", expanded=False):
                         for item in geo:
-                            icon = "✅" if "oui" in item.lower() else "⚠️"
-                            st.caption(f"{icon} {item}")
+                            ok = "oui" in item.lower()
+                            st.caption(f"{'[ok]' if ok else '[!]'} {item}")
                 with st.expander("Article révisé complet", expanded=False):
                     st.markdown(pl["full_article"] or "")
 
             # Boutons de décision
             st.markdown("")
-            next_label = "Enregistrer l'article ✅" if step_done == 4 \
-                         else f"✅ Valider → {STEPS[step_done + 1][2]}"
+            next_label = "Enregistrer l'article" if step_done == 4 \
+                         else f"Valider → {STEPS[step_done + 1][2]}"
             btn_ok, btn_stop = st.columns(2)
             with btn_ok:
                 if st.button(next_label, type="primary",
@@ -514,7 +513,7 @@ elif page == "generate":
                     pl["waiting"] = False
                     st.rerun()
             with btn_stop:
-                if st.button("⛔ Arrêter", use_container_width=True,
+                if st.button("Arrêter", use_container_width=True,
                              key=f"val_stop_{step_done}"):
                     pl["stopped"] = True
                     pl["active"]  = False
@@ -522,7 +521,7 @@ elif page == "generate":
 
             # ── Revenir à une étape ─────────────────────────────────────────
             if step_done > 0:
-                with st.expander("🔄 Revenir à une étape précédente et régénérer"):
+                with st.expander("Revenir à une étape précédente et régénérer"):
                     redo_idx = st.selectbox(
                         "Étape à régénérer",
                         options=list(range(step_done + 1)),
@@ -530,7 +529,7 @@ elif page == "generate":
                         key=f"redo_sel_{step_done}",
                     )
                     st.caption("Les étapes suivantes seront effacées et régénérées.")
-                    if st.button("🔄 Régénérer à partir de cette étape",
+                    if st.button("Régénérer à partir de cette étape",
                                  key=f"redo_btn_{step_done}"):
                         # Clear outputs from redo_idx onwards
                         _clear = {
@@ -557,11 +556,11 @@ elif page == "generate":
 
         # ── Arrêt demandé ────────────────────────────────────────────────────
         if pl["stopped"]:
-            st.warning("⛔ Génération arrêtée à l'étape **" +
+            st.warning("Génération arrêtée à l'étape **" +
                        STEPS[min(pl["step"], 4)][2] + "**.")
             if pl["total_cost"] > 0:
-                st.info(f"💰 Coût consommé : {format_usd(pl['total_cost'])}")
-            if st.button("↩️ Nouvelle génération", type="primary"):
+                st.info(f"Coût consommé : {format_usd(pl['total_cost'])}")
+            if st.button("Nouvelle génération", type="primary"):
                 st.session_state.pl = None
                 st.rerun()
 
@@ -587,13 +586,11 @@ elif page == "generate":
                                                    profile_cache_exists)
                         cached = profile_cache_exists(pl["site_url"])
                         if cached and not pl["refresh_style"]:
-                            st.write(f"✅ Style profile en cache pour {pl['site_url']}")
+                            st.write(f"Style profile en cache pour {pl['site_url']}")
                         else:
-                            st.write(f"🌐 Scraping de {pl['site_url']} …")
-                            if config.FIRECRAWL_API_KEY:
-                                st.write("🔑 Firecrawl API détectée")
-                            else:
-                                st.write("⚠️ Firecrawl non configuré — fallback BeautifulSoup")
+                            st.write(f"Scraping de {pl['site_url']} ...")
+                            if not config.FIRECRAWL_API_KEY:
+                                st.write("Firecrawl non configuré — fallback BeautifulSoup")
                         profile_data, sp_in, sp_out = build_style_profile(
                             pl["site_url"], force_refresh=pl["refresh_style"])
                         style_ctx = style_profile_to_system_context(profile_data)
@@ -602,26 +599,35 @@ elif page == "generate":
                         pl["style_ctx"]     = style_ctx
                         detected_lang = str(profile_data.get("detected_language", "fr")).lower()[:2]
                         pl["lang"] = detected_lang if detected_lang in ("fr", "nl", "en") else "fr"
-                        st.write(f"✅ {len(profile_data)} attributs extraits "
-                                 f"{'(cache)' if not sp_in else f'— {sp_in:,} tokens input'} "
-                                 f"· langue : {pl['lang']}")
-                        detail = "cache" if not sp_in else f"{sp_in:,} tok"
+                        scraped_count = profile_data.get("_scraped_count", 0)
+                        scraped_urls  = profile_data.get("_pages_scraped", [])
+                        if sp_in:
+                            st.write(f"{scraped_count} page(s) scrappée(s) — {sp_in:,} tokens — langue : {pl['lang']}")
+                            for u in scraped_urls:
+                                st.caption(u)
+                        else:
+                            st.write(f"Style profile chargé depuis le cache — langue : {pl['lang']}")
+                        if scraped_count > 0 and scraped_count < 5:
+                            st.warning(
+                                f"Seulement {scraped_count} page(s) scrappée(s). "
+                                f"Minimum recommandé : 5. Le profil de ton peut manquer de précision. "
+                                f"Cochez 'Rafraîchir le style' et vérifiez que le site est accessible."
+                            )
+                        detail = "cache" if not sp_in else f"{scraped_count} pages · {sp_in:,} tok"
                         _cost  = sp_cost
 
                     elif s == 1:
                         from seo_intelligence import gather_seo_intelligence, seo_intel_to_brief
 
-                        if config.DATAFORSEO_LOGIN:
-                            st.write(f"🔑 DataForSEO login : `{config.DATAFORSEO_LOGIN[:20]}…`")
-                        else:
-                            st.warning("⚠️ DATAFORSEO_LOGIN manquant — données SEO ignorées")
+                        if not config.DATAFORSEO_LOGIN:
+                            st.warning("DATAFORSEO_LOGIN manquant — données SEO ignorées")
 
                         intel     = gather_seo_intelligence(pl["keyword"])
                         seo_brief = seo_intel_to_brief(intel)
 
                         # Affiche les erreurs réelles si présentes
                         for err in intel.errors:
-                            st.error(f"❌ {err}")
+                            st.error(str(err))
 
                         cl = intel.keyword_cluster
                         st.write(f"{len(intel.serp_top10)} SERP · "
@@ -630,7 +636,7 @@ elif page == "generate":
                                  f"{len(cl.lsi)} LSI · "
                                  f"{len(cl.long_tail)} longue traîne")
                         if intel.cannibalisation_risk:
-                            st.warning(f"⚠️ {len(intel.cannibalisation_risk)} risques cannibalisation")
+                            st.warning(f"{len(intel.cannibalisation_risk)} risque(s) de cannibalisation détecté(s)")
 
                         pl["intel_paa"]          = intel.paa_questions
                         pl["intel_secondary"]     = intel.keyword_cluster.secondary
@@ -641,9 +647,9 @@ elif page == "generate":
                         pl["intel_serp_titles"]   = [(r.title, r.url) for r in intel.serp_top10[:8]]
                         pl["seo_brief"]           = seo_brief
                         if intel.search_intent:
-                            st.info(f"🔎 Intention de recherche : **{intel.search_intent}**")
+                            st.info(f"Intention de recherche : **{intel.search_intent}**")
                         total_kw = len(cl.secondary) + len(cl.lsi) + len(cl.long_tail)
-                        detail = f"{total_kw} KW · {len(pl['intel_paa'])} PAA" if total_kw else "⚠️ partiel"
+                        detail = f"{total_kw} KW · {len(pl['intel_paa'])} PAA" if total_kw else "partiel"
                         _cost  = 0.0
 
                     elif s in (2, 3, 4):
@@ -715,7 +721,7 @@ elif page == "generate":
                             if pl.get("geo_check"):
                                 ok = sum(1 for g in pl["geo_check"] if "oui" in g.lower())
                                 st.write(f"GEO : {ok}/{len(pl['geo_check'])} sections conformes")
-                            detail = f"{len(pl['meta_title'])} car." if pl["meta_title"] else "⚠️ parsing"
+                            detail = f"{len(pl['meta_title'])} car." if pl["meta_title"] else "parsing KO"
 
                         _cost = PassCost(config.CLAUDE_SONNET, in_t, out_t).usd
                         pl["pass_costs"].append([config.CLAUDE_SONNET, in_t, out_t])
@@ -727,13 +733,13 @@ elif page == "generate":
                     pl["step_costs"][s] = _cost
                     pl["total_cost"]   += _cost
                     pl["step"]          = s + 1
-                    status.update(label=f"✅ {STEPS[s][2]} — terminé", state="complete", expanded=False)
+                    status.update(label=f"{STEPS[s][2]} — terminé", state="complete", expanded=False)
 
                 except Exception as err:
                     pl["states"][s]  = "error"
                     pl["details"][s] = str(err)[:40]
                     pl["step"]       = s + 1
-                    status.update(label=f"❌ {STEPS[s][2]} — erreur", state="error")
+                    status.update(label=f"{STEPS[s][2]} — erreur", state="error")
                     st.error(str(err))
                     if s not in (1, 4):  # SEO et métas peuvent échouer sans tout stopper
                         pl["stopped"] = True
@@ -744,7 +750,7 @@ elif page == "generate":
                                 unsafe_allow_html=True)
             cost_ph.markdown(
                 f'<div style="text-align:right;margin:-4px 0 16px">'
-                f'<span class="cost-badge">💰 Coût en cours : {format_usd(pl["total_cost"])}</span>'
+                f'<span class="cost-badge">Coût en cours : {format_usd(pl["total_cost"])}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -854,7 +860,7 @@ elif page == "generate":
                     pass
 
             pl["active"] = False
-            st.success(f"✅ Article enregistré — {bundle['word_count']} mots · Coût réel : {format_usd(article.cost.total_usd)}")
+            st.success(f"Article enregistré — {bundle['word_count']} mots · Coût réel : {format_usd(article.cost.total_usd)}")
 
             st.markdown('<div class="section-hdr">Résultats</div>', unsafe_allow_html=True)
             r1, r2, r3, r4 = st.columns(4)
@@ -867,13 +873,13 @@ elif page == "generate":
             st.markdown(f"**Meta description :** {pl['meta_description']}")
 
             if pl["intel_cannib"]:
-                st.warning(f"⚠️ {len(pl['intel_cannib'])} risque(s) de cannibalisation")
+                st.warning(f"{len(pl['intel_cannib'])} risque(s) de cannibalisation")
                 for url in pl["intel_cannib"]:
                     st.caption(f"• {url}")
 
             # Internal link suggestions block
             if pl.get("internal_link_suggestions"):
-                with st.expander(f"🔗 Suggestions de maillage interne ({len(pl['internal_link_suggestions'])} liens)", expanded=True):
+                with st.expander(f"Suggestions de maillage interne ({len(pl['internal_link_suggestions'])} liens)", expanded=True):
                     for s in pl["internal_link_suggestions"]:
                         st.markdown(
                             f"**Ancre :** `{s['anchor']}`  \n"
@@ -883,7 +889,7 @@ elif page == "generate":
                         st.divider()
 
             # Article tabs: preview / HTML
-            tab_prev, tab_html = st.tabs(["📄 Article (markdown)", "🌐 Code HTML (copier-coller)"])
+            tab_prev, tab_html = st.tabs(["Article (markdown)", "Code HTML (copier-coller)"])
             with tab_prev:
                 with st.expander("Briefing éditorial", expanded=False):
                     st.markdown(pl["briefing"] or "")
@@ -893,13 +899,13 @@ elif page == "generate":
                 st.caption("Copie ce code HTML et colle-le dans ton CMS.")
 
             d1, d2, d3, d4 = st.columns(4)
-            d1.download_button("⬇️ .md", md_content, f"{slug}_{ts}.md",
+            d1.download_button("Télécharger .md", md_content, f"{slug}_{ts}.md",
                                "text/markdown", use_container_width=True)
-            d2.download_button("⬇️ .json", json_content, f"{slug}_{ts}.json",
+            d2.download_button("Télécharger .json", json_content, f"{slug}_{ts}.json",
                                "application/json", use_container_width=True)
-            d3.download_button("⬇️ .html", html_content, f"{slug}_{ts}.html",
+            d3.download_button("Télécharger .html", html_content, f"{slug}_{ts}.html",
                                "text/html", use_container_width=True)
-            if d4.button("✍️ Nouvelle génération", use_container_width=True):
+            if d4.button("Nouvelle génération", use_container_width=True):
                 st.session_state.pl = None
                 st.rerun()
 
@@ -908,13 +914,13 @@ elif page == "generate":
 # PAGE — BIBLIOTHÈQUE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "library":
-    st.markdown("## 📚 Bibliothèque de contenus")
+    st.markdown("## Bibliothèque de contenus")
 
     articles = _load_articles()
     if not articles:
-        st.info("Aucun article généré pour l'instant. Va dans **✍️ Générer** pour commencer.")
+        st.info("Aucun article généré pour l'instant. Va dans **Générer** pour commencer.")
     else:
-        search = st.text_input("🔍 Rechercher un mot-clé ou site", placeholder="ex: rénovation", label_visibility="collapsed")
+        search = st.text_input("Rechercher un mot-clé ou site", placeholder="ex: rénovation", label_visibility="collapsed")
         if search:
             articles = [a for a in articles if search.lower() in a.get("keyword","").lower()
                         or search.lower() in a.get("site_url","").lower()]
@@ -932,7 +938,7 @@ elif page == "library":
                 expanded=False,
             ):
                 if site_str:
-                    st.caption(f"🌐 Site : `{site_str}`")
+                    st.caption(f"Site : `{site_str}`")
                 st.markdown(f"**Meta title :** {a.get('meta_title','—')}")
                 st.markdown(f"**Meta desc :** {a.get('meta_description','—')}")
 
@@ -942,11 +948,11 @@ elif page == "library":
                     for q in seo["paa"][:4]:
                         st.caption(f"• {q}")
                 if seo.get("cannibalisations"):
-                    st.warning(f"⚠️ {len(seo['cannibalisations'])} risque(s) cannibalisation")
+                    st.warning(f"{len(seo['cannibalisations'])} risque(s) de cannibalisation")
 
                 if cost_d:
                     st.markdown(
-                        f'<span class="cost-badge">💰 {cost_str} total — '
+                        f'<span class="cost-badge">{cost_str} total — '
                         f'{cost_d.get("input_tokens",0):,} tokens in / {cost_d.get("output_tokens",0):,} out</span>',
                         unsafe_allow_html=True,
                     )
@@ -959,15 +965,15 @@ elif page == "library":
                     with open(os.path.join(config.OUTPUT_DIR, fname[0]), encoding="utf-8") as mf:
                         md_c = mf.read()
                     dl1, dl2 = st.columns(2)
-                    dl1.download_button("⬇️ .md",   md_c,                          fname[0],               "text/markdown",    key=f"lib_md_{fname[0]}")
-                    dl2.download_button("⬇️ .json", json.dumps(a, ensure_ascii=False, indent=2), fname[0].replace(".md",".json"), "application/json", key=f"lib_js_{fname[0]}")
+                    dl1.download_button(".md",   md_c,                          fname[0],               "text/markdown",    key=f"lib_md_{fname[0]}")
+                    dl2.download_button(".json", json.dumps(a, ensure_ascii=False, indent=2), fname[0].replace(".md",".json"), "application/json", key=f"lib_js_{fname[0]}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE — PARAMÈTRES
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "settings":
-    st.markdown("## ⚙️ Paramètres")
+    st.markdown("## Paramètres")
 
     # ── API Status ────────────────────────────────────────────────────────────
     st.markdown('<div class="section-hdr">Clés API</div>', unsafe_allow_html=True)
@@ -994,12 +1000,12 @@ elif page == "settings":
     st.markdown('<div class="section-hdr">Test des connexions API</div>', unsafe_allow_html=True)
     tc1, tc2 = st.columns(2)
 
-    if tc1.button("🧪 Tester DataForSEO", use_container_width=True):
+    if tc1.button("Tester DataForSEO", use_container_width=True):
         import base64, requests as _req
         login = config.DATAFORSEO_LOGIN.strip()
         pwd   = config.DATAFORSEO_PASSWORD.strip()
         if not login or not pwd:
-            st.error("❌ DATAFORSEO_LOGIN ou DATAFORSEO_PASSWORD manquant dans les secrets.")
+            st.error("DATAFORSEO_LOGIN ou DATAFORSEO_PASSWORD manquant dans les secrets.")
         else:
             encoded = base64.b64encode(f"{login}:{pwd}".encode()).decode()
             st.code(f"Login    : {login}\n"
@@ -1015,13 +1021,13 @@ elif page == "settings":
                     timeout=15,
                 )
                 if r.status_code == 200:
-                    st.success(f"✅ DataForSEO OK — {r.status_code}")
+                    st.success(f"DataForSEO OK — {r.status_code}")
                 else:
-                    st.error(f"❌ {r.status_code} — {r.text[:300]}")
+                    st.error(f"{r.status_code} — {r.text[:300]}")
             except Exception as e:
-                st.error(f"❌ Erreur réseau : {e}")
+                st.error(f"Erreur réseau : {e}")
 
-    if tc2.button("🧪 Tester Anthropic", use_container_width=True):
+    if tc2.button("Tester Anthropic", use_container_width=True):
         try:
             import anthropic as _ant
             c = _ant.Anthropic(api_key=config.ANTHROPIC_API_KEY)
@@ -1030,16 +1036,16 @@ elif page == "settings":
                 max_tokens=5,
                 messages=[{"role": "user", "content": "hi"}],
             )
-            st.success(f"✅ Anthropic OK — {msg.usage.input_tokens} tokens")
+            st.success(f"Anthropic OK — {msg.usage.input_tokens} tokens")
         except Exception as e:
-            st.error(f"❌ Anthropic : {e}")
+            st.error(f"Anthropic : {e}")
 
     # ── Modèles ───────────────────────────────────────────────────────────────
     st.markdown('<div class="section-hdr">Modèles & paramètres</div>', unsafe_allow_html=True)
     mc1, mc2, mc3 = st.columns(3)
-    mc1.markdown(_kpi("Rédaction (passes 1-4)", config.CLAUDE_SONNET), unsafe_allow_html=True)
-    mc2.markdown(_kpi("Tone Analyzer", config.CLAUDE_OPUS), unsafe_allow_html=True)
-    mc3.markdown(_kpi("Objectif mots", str(config.TARGET_WORD_COUNT)), unsafe_allow_html=True)
+    mc1.metric("Rédaction", config.CLAUDE_SONNET)
+    mc2.metric("Tone Analyzer", config.CLAUDE_OPUS)
+    mc3.metric("Objectif mots", config.TARGET_WORD_COUNT)
 
     # ── Style profiles en cache ────────────────────────────────────────────────
     st.markdown('<div class="section-hdr">Style profiles en cache</div>', unsafe_allow_html=True)
@@ -1051,7 +1057,7 @@ elif page == "settings":
             mtime = os.path.getmtime(fpath)
             with open(fpath, encoding="utf-8") as f:
                 p = json.load(f)
-            with st.expander(f"🎨 `{fname}` — mis à jour le {datetime.fromtimestamp(mtime).strftime('%d/%m/%Y %H:%M')}"):
+            with st.expander(f"`{fname}` — mis à jour le {datetime.fromtimestamp(mtime).strftime('%d/%m/%Y %H:%M')}"):
                 col_pa, col_pb = st.columns(2)
                 with col_pa:
                     st.markdown("**Tonalité :** " + ", ".join(p.get("tonality",[])))
@@ -1062,7 +1068,7 @@ elif page == "settings":
                     st.markdown("**Vocab. évité :** " + ", ".join(p.get("avoided_vocabulary",[])[:3]))
                 with st.expander("JSON brut"):
                     st.json(p)
-                if st.button(f"🗑️ Supprimer ce profil", key=f"del_{fname}"):
+                if st.button(f"Supprimer ce profil", key=f"del_{fname}"):
                     os.remove(fpath)
                     st.success(f"{fname} supprimé.")
                     st.rerun()
@@ -1071,7 +1077,7 @@ elif page == "settings":
     st.markdown('<div class="section-hdr">Coût estimé par article</div>', unsafe_allow_html=True)
 
     st.info(
-        "💡 **Ces prix sont en USD par million de tokens (MTok)** — pas par article.\n\n"
+        "**Ces prix sont en USD par million de tokens (MTok)** — pas par article.\n\n"
         "Un article de ~1 500 mots consomme environ **5 000 à 12 000 tokens** en tout. "
         "Le coût réel tourne entre **$0.10 et $0.35 par article**, selon que le style profile "
         "est déjà en cache ou non.\n\n"
