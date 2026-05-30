@@ -261,32 +261,23 @@ Voici le résumé du briefing établi précédemment :
 {context_summary}
 
 Ton rôle :
-Complète le briefing avec les spécifications SEO détaillées :
-
-1. Mots-clés secondaires à intégrer (priorisés par pertinence)
-
-2. Recommandations de maillage interne (si applicable)
-
-3. Suggestions de méta-title et méta-description
-
-4. Questions fréquentes (FAQ) à intégrer dans la page
-
-5. Checklist technique (si applicable)
+Complète le briefing avec les spécifications SEO détaillées.
 
 Données SEO disponibles :
 {seo_brief}
 
+À générer (en markdown, section ## SEO & Technique) :
+1. Mots-clés secondaires à intégrer (5-10 max, par priorité)
+2. Suggestions de méta-title (50-60 car.) et méta-description (140-160 car.)
+3. Questions fréquentes (FAQ) à intégrer dans la page (3-5 questions max)
+4. Note sur maillage interne si applicable (1-2 lignes)
+
 Règles absolues :
 - Pas d'emoji dans le texte
 - Pas de majuscule à chaque mot des titres
+- Sois concis et direct
 
-Retourne UNIQUEMENT la partie suivante du briefing (en markdown) :
-## SEO & Technique
-[Mots-clés secondaires]
-[Maillage interne]
-[Métag suggestions]
-[FAQ]
-[Checklist technique]
+Retourne UNIQUEMENT la section ## SEO & Technique complète.
 """
 
 
@@ -383,7 +374,7 @@ def generate_chunked_briefing(
         context_summary=summary2,
         seo_brief=seo_brief or "(aucune donnée SEO disponible)",
     )
-    part3, in3, out3 = _call_claude(system, p3, max_tokens=2000)
+    part3, in3, out3 = _call_claude(system, p3, max_tokens=3000)
     parts.append(part3)
     total_in += in3
     total_out += out3
