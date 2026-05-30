@@ -603,7 +603,8 @@ def generate_article_by_sections(
         section_chunks = [(h2, 0, 1) for h2 in h2_sections]
 
     sections = []
-    total_in, total_out = 0
+    total_in = 0
+    total_out = 0
     continuation = ""
     seen_headers = set()
 
