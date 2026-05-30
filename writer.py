@@ -261,7 +261,7 @@ Voici le résumé du briefing établi précédemment :
 {context_summary}
 
 Ton rôle :
-Complète le briefing avec les spécifications SEO détaillées (mots-clés et métas).
+Complète le briefing avec les spécifications SEO détaillées (mots-clés et maillage).
 
 Données SEO disponibles :
 {seo_brief}
@@ -269,14 +269,36 @@ Données SEO disponibles :
 À générer (en markdown, section ## SEO & Technique) :
 1. Mots-clés secondaires à intégrer (priorisés par pertinence)
 2. Recommandations de maillage interne (si applicable)
-3. Suggestions de méta-title (50-60 caractères) et méta-description (140-160 caractères)
 
 Règles absolues :
 - Pas d'emoji dans le texte
 - Pas de majuscule à chaque mot des titres
 - Phrases naturelles et fluides
 
-Retourne UNIQUEMENT la section ## SEO & Technique (mots-clés, maillage, métas).
+Retourne UNIQUEMENT la section ## SEO & Technique (mots-clés et maillage uniquement).
+"""
+
+BRIEFING_PART3_SEO_METAS = """\
+Voici le résumé du briefing établi précédemment :
+
+{context_summary}
+
+Ton rôle :
+Complète le briefing avec les spécifications SEO détaillées (métas).
+
+Données SEO disponibles :
+{seo_brief}
+
+À générer (en markdown, section ## Métas) :
+1. Suggestions de méta-title (50-60 caractères)
+2. Suggestions de méta-description (140-160 caractères)
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres
+- Phrases naturelles et fluides
+
+Retourne UNIQUEMENT la section ## Métas complète.
 """
 
 BRIEFING_PART3_SEO_FAQ = """\
@@ -390,8 +412,8 @@ def generate_chunked_briefing(
     # Summary for next call
     summary2 = _build_context_summary(part1 + "\n\n" + part2, max_words=120)
 
-    # Part 3a: SEO Keywords & Metas
-    logger.info("[ChunkedBriefing] Part 3a — SEO Keywords & Metas")
+    # Part 3a: SEO Keywords & Maillage
+    logger.info("[ChunkedBriefing] Part 3a — SEO Keywords & Maillage")
     p3a = BRIEFING_PART3_SEO_KEYWORDS.format(
         context_summary=summary2,
         seo_brief=seo_brief or "(aucune donnée SEO disponible)",
@@ -404,9 +426,9 @@ def generate_chunked_briefing(
     # Summary for next call
     summary3a = _build_context_summary(part1 + "\n\n" + part2 + "\n\n" + part3a, max_words=150)
 
-    # Part 3b: FAQ & Technique
-    logger.info("[ChunkedBriefing] Part 3b — FAQ & Technique")
-    p3b = BRIEFING_PART3_SEO_FAQ.format(
+    # Part 3b: SEO Metas
+    logger.info("[ChunkedBriefing] Part 3b — SEO Metas")
+    p3b = BRIEFING_PART3_SEO_METAS.format(
         context_summary=summary3a,
         seo_brief=seo_brief or "(aucune donnée SEO disponible)",
     )
@@ -414,6 +436,20 @@ def generate_chunked_briefing(
     parts.append(part3b)
     total_in += in3b
     total_out += out3b
+
+    # Summary for next call
+    summary3b = _build_context_summary(part1 + "\n\n" + part2 + "\n\n" + part3a + "\n\n" + part3b, max_words=180)
+
+    # Part 3c: FAQ & Technique
+    logger.info("[ChunkedBriefing] Part 3c — FAQ & Technique")
+    p3c = BRIEFING_PART3_SEO_FAQ.format(
+        context_summary=summary3b,
+        seo_brief=seo_brief or "(aucune donnée SEO disponible)",
+    )
+    part3c, in3c, out3c = _call_claude(system, p3c, max_tokens=2000)
+    parts.append(part3c)
+    total_in += in3c
+    total_out += out3c
 
     full_briefing = "\n\n".join(parts)
     logger.info("[ChunkedBriefing] Complete — %d total tokens", total_in + total_out)
