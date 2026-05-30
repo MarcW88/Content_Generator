@@ -271,14 +271,21 @@ Voici le plan de rédaction déjà généré (NE PAS REPRENDRE ces sections) :
 
 {previous_content}
 
+Sections H2 déjà présentes dans le plan (NE PAS REPRENDRE) :
+{existing_sections}
+
 Ton rôle :
 Continue le plan de rédaction structuré à partir de là où il s'est arrêté.
 
-IMPORTANT : Tu dois CONTINUER le plan existant, PAS créer un nouveau plan.
+CRITIQUE : Tu dois CONTINUER le plan existant, PAS créer un nouveau plan.
 Si le plan précédent contenait des sections H2/H3, continue avec les sections suivantes logiques.
 NE REPETE PAS le header ## Plan de Rédaction.
 NE REPETE PAS les sections H2/H3 déjà écrites ci-dessus.
-NE crée PAS une nouvelle Introduction ou une nouvelle structure complète.
+NE crée PAS une nouvelle Introduction, Conclusion, FAQ ou toute autre section déjà présente.
+NE crée PAS une nouvelle structure complète avec ses propres sections.
+
+Si le plan contient déjà une Conclusion, ne génère PAS une nouvelle Conclusion.
+Si le plan contient déjà des H2, continue avec les H2 suivants logiques.
 
 À générer (en markdown) :
 Continue le plan de rédaction structuré H2 / H3 où chaque section précise
@@ -292,6 +299,7 @@ Règles absolues :
 - Phrases naturelles et fluides
 - NE JAMAIS répéter les headers déjà écrits
 - NE JAMAIS créer une nouvelle structure de plan complète
+- NE JAMAIS générer de nouvelles sections si elles existent déjà (Introduction, Conclusion, FAQ, etc.)
 
 Retourne UNIQUEMENT la continuation du plan de rédaction (sans header ## Plan de Rédaction).
 """
@@ -477,14 +485,20 @@ def generate_chunked_briefing(
     part2b_parts = []
     seen_headers = set()
     previous_plan_content = ""
+    existing_h2_sections = []
     for i in range(3):
         logger.info("[ChunkedBriefing] Part 2b.%d — Plan de Rédaction", i + 1)
         if i == 0:
             p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
         else:
+            # Extract H2 headers from previous content
+            import re
+            h2_matches = re.findall(r'^##\s+(.+)$', previous_plan_content, re.MULTILINE)
+            existing_h2_sections = h2_matches
             p2b = BRIEFING_PART2_PLAN_CONTINUATION.format(
                 context_summary=summary2a,
-                previous_content=previous_plan_content
+                previous_content=previous_plan_content,
+                existing_sections="\n".join(f"- {h2}" for h2 in existing_h2_sections)
             )
         part2b_chunk, in2b, out2b = _call_claude(system, p2b, max_tokens=2000)
         # Post-process: remove duplicate headers
