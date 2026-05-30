@@ -152,18 +152,23 @@ Tâches :
 1. Méta-title : 50-60 caractères, mot-clé en début, accrocheur, pas de majuscule à chaque mot
 2. Méta-description : 140-160 caractères, bénéfice clair, verbe d'action
 3. Révision légère : incohérences de ton, répétitions, transitions
-4. CTA final : 1 CTA de fin d'article aligné avec le style du site
+4. CTA final : 1 phrase de CTA de fin d'article aligné avec le style du site
 5. Vérification GEO : pour chaque H2/H3, vérifie qu'il commence par une phrase-réponse
    directe (« réponse courte d'abord »). Corrige ceux qui ne respectent pas ce principe.
 
-Retourne en JSON strictement valide :
-{{
-  "meta_title": "...",
-  "meta_description": "...",
-  "revised_article": "article complet révisé ici",
-  "cta_final": "...",
-  "geo_check": ["H2 titre — intention couverte : oui/non", ...]
-}}
+Retourne EXACTEMENT dans ce format (balises incluses, rien d'autre avant ===META_TITLE===) :
+
+===META_TITLE===
+<meta title ici>
+===META_DESCRIPTION===
+<meta description ici>
+===GEO_CHECK===
+<une ligne par H2/H3 : Titre section — intention couverte : oui/non>
+===CTA_FINAL===
+<une phrase CTA>
+===REVISED_ARTICLE===
+<article complet révisé en markdown>
+===END===
 """
 
 

@@ -31,131 +31,140 @@ logging.basicConfig(level=logging.INFO,
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
 
-  /* Hide sidebar */
+  /* ── Reset & base ─────────────────────────────────────────────────────────── */
   [data-testid="collapsedControl"] { display: none !important; }
   section[data-testid="stSidebar"]  { display: none !important; }
 
-  /* Base */
-  .stApp { background: #f7f8fa; font-family: 'Inter', system-ui, sans-serif; }
-  .stApp p, .stApp li { color: #374151 !important; font-size: 14px; }
-  .stApp label { color: #374151 !important; font-size: 13px; font-weight: 600; }
-  .stApp h1 { color: #0f172a !important; font-size: 22px; font-weight: 800; }
-  .stApp h2 { color: #0f172a !important; font-size: 18px; font-weight: 700; }
-  .stApp h3 { color: #1e293b !important; font-size: 15px; font-weight: 600; }
+  .stApp {
+    background: #ffffff;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #1a1a2e;
+  }
+  .stApp p, .stApp li { color: #374151 !important; font-size: 14px; line-height: 1.65; }
+  .stApp label        { color: #374151 !important; font-size: 13px; font-weight: 500; }
+  .stApp h1 { color: #0f172a !important; font-size: 24px; font-weight: 800; letter-spacing: -.5px; margin-bottom: 4px; }
+  .stApp h2 { color: #0f172a !important; font-size: 17px; font-weight: 700; letter-spacing: -.2px; }
+  .stApp h3 { color: #374151 !important; font-size: 14px; font-weight: 600; }
 
-  /* Inputs */
-  [data-testid="stTextInput"] input,
+  /* ── Inputs ──────────────────────────────────────────────────────────────── */
+  [data-testid="stTextInput"] input {
+    background: #f9fafb !important; border: 1px solid #e5e7eb !important;
+    border-radius: 6px !important; font-size: 13px !important; color: #0f172a !important;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  [data-testid="stTextInput"] input:focus {
+    border-color: #2563eb !important; background: #fff !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.08) !important;
+  }
   [data-testid="stSelectbox"] > div > div {
-    border-radius: 8px !important; font-size: 13px !important;
-    border-color: #d1d5db !important;
+    background: #f9fafb !important; border: 1px solid #e5e7eb !important;
+    border-radius: 6px !important; font-size: 13px !important;
   }
-  [data-testid="stTextInput"] input:focus { border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 3px rgba(59,130,246,.12) !important; }
 
-  /* Primary button */
+  /* ── Buttons ─────────────────────────────────────────────────────────────── */
   button[kind="primary"] {
-    background: #3b82f6 !important; border-radius: 8px !important;
-    font-weight: 700 !important; font-size: 13px !important; border: none !important;
-    padding: 10px 20px !important; transition: background .2s !important;
+    background: #2563eb !important; color: #fff !important;
+    border: none !important; border-radius: 6px !important;
+    font-size: 13px !important; font-weight: 600 !important;
+    padding: 9px 18px !important; letter-spacing: -.1px !important;
+    transition: background .15s !important;
   }
-  button[kind="primary"]:hover { background: #2563eb !important; }
+  button[kind="primary"]:hover  { background: #1d4ed8 !important; }
+  button[kind="secondary"] {
+    background: #fff !important; color: #374151 !important;
+    border: 1px solid #d1d5db !important; border-radius: 6px !important;
+    font-size: 13px !important; font-weight: 500 !important;
+  }
+  button[kind="secondary"]:hover { background: #f9fafb !important; border-color: #9ca3af !important; }
 
-  /* Top nav */
+  /* ── Top nav ──────────────────────────────────────────────────────────────── */
   .nav-bar {
     display: flex; align-items: center; justify-content: space-between;
-    background: #ffffff; border-bottom: 2px solid #e5e7eb;
-    padding: 0 32px; height: 60px; margin-bottom: 28px;
-    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    background: #fff; border-bottom: 1px solid #f0f0f0;
+    padding: 0 40px; height: 56px; margin-bottom: 32px;
   }
-  .nav-brand { color: #0f172a; font-size: 15px; font-weight: 800; letter-spacing: -.3px; }
-  .nav-brand span { color: #3b82f6; }
-  .nav-links { display: flex; gap: 4px; }
+  .nav-brand { font-size: 14px; font-weight: 800; color: #0f172a; letter-spacing: -.3px; }
+  .nav-brand span { color: #2563eb; }
+  .nav-links { display: flex; gap: 2px; }
   .nav-link {
-    padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
-    color: #6b7280; text-decoration: none; cursor: pointer; border: none;
-    background: transparent; transition: all .15s;
+    padding: 5px 12px; border-radius: 5px; font-size: 13px; font-weight: 500;
+    color: #6b7280; cursor: pointer; transition: all .12s;
   }
-  .nav-link:hover { background: #f3f4f6; color: #0f172a; }
-  .nav-link.active { background: #eff6ff; color: #3b82f6; }
+  .nav-link:hover  { background: #f9fafb; color: #0f172a; }
+  .nav-link.active { color: #2563eb; font-weight: 600; }
 
-  /* KPI cards */
+  /* ── KPI cards ───────────────────────────────────────────────────────────── */
   .kpi-card {
-    background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px;
-    padding: 20px 24px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    background: #fafafa; border: 1px solid #f0f0f0; border-radius: 10px;
+    padding: 18px 20px;
   }
-  .kpi-label { color: #9ca3af; font-size: 11px; font-weight: 700;
-               letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
-  .kpi-value { color: #0f172a; font-size: 28px; font-weight: 800; line-height: 1; }
-  .kpi-sub   { color: #3b82f6; font-size: 12px; font-weight: 500; margin-top: 6px; }
+  .kpi-label { color: #9ca3af; font-size: 11px; font-weight: 600;
+               letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+  .kpi-value { color: #0f172a; font-size: 26px; font-weight: 800; line-height: 1; }
+  .kpi-sub   { color: #2563eb; font-size: 12px; font-weight: 500; margin-top: 5px; }
 
-  /* Pipeline stepper */
+  /* ── Pipeline stepper ────────────────────────────────────────────────────── */
   .pipeline-wrapper {
-    background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px;
-    padding: 24px 28px; margin: 16px 0 24px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    background: #fff; border: 1px solid #f0f0f0; border-radius: 12px;
+    padding: 24px 28px; margin: 12px 0 28px;
   }
   .pipeline-title {
-    font-size: 11px; font-weight: 700; color: #9ca3af;
-    text-transform: uppercase; letter-spacing: .1em; margin-bottom: 20px;
+    font-size: 11px; font-weight: 600; color: #9ca3af;
+    text-transform: uppercase; letter-spacing: .1em; margin-bottom: 18px;
   }
-  .step-row { display: flex; gap: 10px; align-items: stretch; }
+  .step-row { display: flex; gap: 8px; align-items: stretch; }
   .step-box {
-    flex: 1; background: #f9fafb; border: 2px solid #e5e7eb;
-    border-radius: 12px; padding: 16px 10px; text-align: center;
+    flex: 1; background: #fafafa; border: 1px solid #f0f0f0;
+    border-radius: 8px; padding: 14px 10px; text-align: center;
     transition: all .2s ease;
   }
   .step-box.running {
-    background: #eff6ff; border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59,130,246,.12);
-    animation: pulse-border 1.5s ease-in-out infinite;
+    background: #eff6ff; border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37,99,235,.1);
+    animation: pulse-step 1.8s ease-in-out infinite;
   }
-  @keyframes pulse-border {
-    0%,100% { box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
-    50%      { box-shadow: 0 0 0 6px rgba(59,130,246,.06); }
+  @keyframes pulse-step {
+    0%,100% { box-shadow: 0 0 0 2px rgba(37,99,235,.10); }
+    50%      { box-shadow: 0 0 0 4px rgba(37,99,235,.05); }
   }
-  .step-box.done    { background: #f0fdf4; border-color: #22c55e; }
-  .step-box.error   { background: #fef2f2; border-color: #ef4444; }
-  .step-num   { font-size: 10px; font-weight: 700; color: #d1d5db;
+  .step-box.done  { background: #f0fdf4; border-color: #86efac; }
+  .step-box.error { background: #fef2f2; border-color: #fca5a5; }
+  .step-num   { font-size: 10px; font-weight: 600; color: #d1d5db;
                 text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
-  .step-box.running .step-num { color: #3b82f6; }
-  .step-box.done    .step-num { color: #22c55e; }
-  .step-box.error   .step-num { color: #ef4444; }
-  .step-icon  { font-size: 24px; margin-bottom: 6px; }
-  .step-name  { font-size: 12px; font-weight: 700; color: #374151; margin-bottom: 3px; }
-  .step-detail{ font-size: 11px; color: #9ca3af; min-height: 15px; }
-  .step-cost  { font-size: 11px; color: #16a34a; font-weight: 600; margin-top: 4px; }
+  .step-box.running .step-num { color: #2563eb; }
+  .step-box.done    .step-num { color: #16a34a; }
+  .step-box.error   .step-num { color: #dc2626; }
+  .step-icon  { font-size: 22px; margin-bottom: 5px; }
+  .step-name  { font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 2px; }
+  .step-detail{ font-size: 11px; color: #9ca3af; min-height: 14px; }
+  .step-cost  { font-size: 11px; color: #16a34a; font-weight: 600; margin-top: 3px; }
 
-  /* Validation card */
-  .val-card {
-    background: #fffbeb; border: 1px solid #fcd34d; border-radius: 12px;
-    padding: 16px 20px; margin: 12px 0;
-  }
-
-  /* Cost badge */
+  /* ── Cost badge ──────────────────────────────────────────────────────────── */
   .cost-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 20px;
-    padding: 5px 14px; font-size: 13px; font-weight: 700; color: #15803d;
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #f0fdf4; border: 1px solid #d1fae5;
+    border-radius: 20px; padding: 4px 12px;
+    font-size: 12px; font-weight: 600; color: #15803d;
   }
 
-  /* Section header */
+  /* ── Section header ──────────────────────────────────────────────────────── */
   .section-hdr {
-    color: #9ca3af; font-size: 11px; font-weight: 700; letter-spacing: .1em;
-    text-transform: uppercase; border-bottom: 2px solid #f3f4f6;
-    padding-bottom: 10px; margin: 32px 0 20px;
+    color: #9ca3af; font-size: 11px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase; border-bottom: 1px solid #f3f4f6;
+    padding-bottom: 8px; margin: 36px 0 20px;
   }
 
-  /* API chips */
+  /* ── API status chips ────────────────────────────────────────────────────── */
   .profile-chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px;
-    padding: 6px 14px; font-size: 13px; color: #374151; margin: 4px;
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #fafafa; border: 1px solid #e5e7eb; border-radius: 6px;
+    padding: 5px 12px; font-size: 12px; color: #374151; margin: 3px;
     font-weight: 500;
   }
-  .chip-green { background: #f0fdf4; border-color: #86efac; color: #15803d; }
-  .chip-red   { background: #fef2f2; border-color: #fca5a5; color: #dc2626; }
+  .chip-green { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+  .chip-red   { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 
   /* Dataframe + expanders */
   [data-testid="stDataFrame"] { background: #fff; border-radius: 10px; }
@@ -777,26 +786,33 @@ elif page == "generate":
                             prompt = META_PROMPT.format(
                                 full_article=pl["full_article"] or ""
                             )
-                            text, in_t, out_t = _call_claude(system, prompt, max_tokens=4000)
-                            clean = text.strip()
-                            if clean.startswith("```"):
-                                clean = clean.split("```")[1]
-                                if clean.startswith("json"):
-                                    clean = clean[4:]
-                            try:
-                                p4 = _json.loads(clean)
-                                pl["meta_title"]       = p4.get("meta_title", "")
-                                pl["meta_description"] = p4.get("meta_description", "")
-                                revised = p4.get("revised_article", pl["full_article"])
-                                pl["full_article"] = f"{revised}\n\n{p4.get('cta_final','')}".strip()
-                                pl["geo_check"]    = p4.get("geo_check", [])
-                            except Exception:
-                                pass  # keep existing full_article
-                            st.write(f"Meta title : {pl['meta_title']}")
+                            text, in_t, out_t = _call_claude(system, prompt, max_tokens=6000)
+
+                            import re as _re
+                            def _extract(tag: str, nxt: str, src: str) -> str:
+                                m = _re.search(
+                                    rf"==={tag}===\s*(.*?)\s*==={nxt}===",
+                                    src, _re.DOTALL)
+                                return m.group(1).strip() if m else ""
+
+                            meta_title       = _extract("META_TITLE",       "META_DESCRIPTION", text)
+                            meta_description = _extract("META_DESCRIPTION",  "GEO_CHECK",        text)
+                            geo_raw          = _extract("GEO_CHECK",         "CTA_FINAL",        text)
+                            cta_final        = _extract("CTA_FINAL",         "REVISED_ARTICLE",  text)
+                            revised          = _extract("REVISED_ARTICLE",   "END",              text)
+
+                            pl["meta_title"]       = meta_title or pl["meta_title"]
+                            pl["meta_description"] = meta_description or pl["meta_description"]
+                            pl["geo_check"]        = [l.strip() for l in geo_raw.splitlines() if l.strip()]
+                            if revised:
+                                pl["full_article"] = f"{revised}\n\n{cta_final}".strip() if cta_final else revised
+
+                            st.write(f"Meta title ({len(pl['meta_title'])} car.) : {pl['meta_title']}")
+                            st.write(f"Meta desc. ({len(pl['meta_description'])} car.)")
                             if pl.get("geo_check"):
                                 ok = sum(1 for g in pl["geo_check"] if "oui" in g.lower())
                                 st.write(f"GEO : {ok}/{len(pl['geo_check'])} sections conformes")
-                            detail = f"{len(pl['meta_title'])} car."
+                            detail = f"{len(pl['meta_title'])} car." if pl["meta_title"] else "⚠️ parsing"
 
                         _cost = PassCost(config.CLAUDE_SONNET, in_t, out_t).usd
                         pl["pass_costs"].append([config.CLAUDE_SONNET, in_t, out_t])
