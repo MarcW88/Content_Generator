@@ -396,6 +396,7 @@ elif page == "generate":
                 "internal_link_suggestions": [],
                 "system_prompt":    None,
                 "lang":             "fr",
+                "user_feedback":    "",
                 # stepper display
                 "states":        ["pending"] * 5,
                 "details":       [""] * 5,
@@ -485,6 +486,14 @@ elif page == "generate":
                 st.caption(f"{wc} mots")
                 with st.expander("Lire le briefing & plan complet", expanded=True):
                     st.markdown(pl["briefing"])
+                st.markdown("**Feedback / adaptations (optionnel)**")
+                feedback = st.text_area(
+                    "Instructions pour la rédaction (ex: insister sur tel aspect, changer la tonalité, ajouter une section...)",
+                    value=pl.get("user_feedback", ""),
+                    key=f"feedback_{step_done}",
+                    placeholder="Laisse vide si pas d'adaptation nécessaire"
+                )
+                pl["user_feedback"] = feedback
             elif step_done == 3 and pl["full_article"]:
                 wc = _count_words(pl["full_article"])
                 st.caption(f"{wc} mots")
@@ -664,27 +673,30 @@ elif page == "generate":
                         system = pl["system_prompt"]
 
                         if s == 2:  # Briefing & plan
+                            from writer import generate_chunked_briefing
                             ctx = pl.get("context_doc") or ""
-                            ctx_block = f"Contenu du document fourni :\n{ctx}" if ctx else "(aucun document fourni)"
-                            prompt = BRIEFING_PROMPT.format(
-                                keyword     = pl["keyword"],
-                                site_url    = pl["site_url"],
-                                country     = pl["country"],
-                                page_type   = pl.get("page_type", "Article de blog"),
-                                context_doc = ctx_block,
-                                seo_brief   = pl["seo_brief"] or "(aucune donnée SEO disponible)",
+                            text, in_t, out_t = generate_chunked_briefing(
+                                keyword=pl["keyword"],
+                                site_url=pl["site_url"],
+                                country=pl["country"],
+                                page_type=pl.get("page_type", "Article de blog"),
+                                context_doc=ctx or "(aucun document fourni)",
+                                seo_brief=pl["seo_brief"] or "(aucune donnée SEO disponible)",
+                                system=system,
+                                lang=pl.get("lang", "fr"),
                             )
-                            text, in_t, out_t = _call_claude(system, prompt, max_tokens=4000)
                             pl["briefing"] = text
                             wc = _count_words(text)
-                            st.write(f"Briefing — {wc} mots")
+                            st.write(f"Briefing — {wc} mots (chunked)")
                             detail = f"{wc} mots"
 
                         elif s == 3:  # Article complet
+                            user_feedback = pl.get("user_feedback", "")
+                            feedback_block = f"\n\n--- FEEDBACK UTILISATEUR ---\n{user_feedback}\n--- FIN FEEDBACK ---" if user_feedback else ""
                             prompt = ARTICLE_PROMPT.format(
                                 keyword = pl["keyword"],
                                 briefing= pl["briefing"],
-                            )
+                            ) + feedback_block
                             text, in_t, out_t = _call_claude(system, prompt, max_tokens=6000)
                             pl["full_article"] = text
                             wc = _count_words(text)

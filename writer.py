@@ -179,6 +179,250 @@ Retourne EXACTEMENT dans ce format (balises incluses, rien d'autre avant ===META
 """
 
 
+# ── Chunked Briefing Prompts ───────────────────────────────────────────────────
+
+BRIEFING_PART1_CONTEXT = """\
+Mot-clé cible : «{keyword}»
+Type de page : {page_type}
+Site destinataire : {site_url}
+Pays / marché cible : {country}
+
+--- INFORMATIONS DE CONTEXTE FOURNIES (si disponibles) ---
+{context_doc}
+---
+
+Ton rôle :
+1. Décris brièvement les activités de {site_url} (2-3 phrases) pour cadrer la demande.
+
+2. Analyse des concurrents dans les SERP locales ({country}) :
+   Pour chaque source SERP ci-dessous, identifie :
+   - Si la page est commerciale (vente, produit, landing) ou informationnelle (guide, blog)
+   - L'angle principal de la page
+   - Ce qu'elle couvre bien et ce qui manque
+   → Conclus par l'angle différenciant pour {site_url} qui n'est PAS couvert par ces concurrents
+
+3. Les sources SERP locales ({country}) figurent dans les données SEO ci-dessous.
+   Utilise-les comme références — elles sont réelles, issues du marché cible.
+   Si la liste est vide, identifie toi-même 5 sources pertinentes.
+
+Données SEO disponibles :
+{seo_brief}
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres
+- Phrases naturelles et fluides
+- Langue : français, néerlandais ou anglais selon la langue dominante du site
+
+Retourne UNIQUEMENT la partie suivante du briefing (en markdown) :
+## Contexte & Positionnement
+[Activité du site]
+[Analyse concurrentielle]
+[Angle différenciant]
+"""
+
+BRIEFING_PART2_STRUCTURE = """\
+Voici le contexte et le positionnement établis précédemment :
+
+{context_summary}
+
+Ton rôle :
+En t'appuyant sur ce contexte, rédige la structure détaillée de la page :
+
+1. Intention de recherche détectée et ses implications éditoriales
+
+2. Points clés incontournables à couvrir
+
+3. Plan de rédaction structuré H2 / H3 où chaque section précise
+   l'intention de recherche spécifique à laquelle elle répond
+   (ex. : « — intention : comprendre le coût »)
+
+4. Recommandations de tonalité et de style adaptées au type de page
+
+5. Longueur cible : 1 200 à 1 800 mots
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres
+- Phrases naturelles et fluides
+
+Retourne UNIQUEMENT la partie suivante du briefing (en markdown) :
+## Structure & Guidelines
+[Intention de recherche]
+[Points clés]
+[Plan H2/H3 avec intentions]
+[Tonalité & style]
+[Longueur cible]
+"""
+
+BRIEFING_PART3_SEO = """\
+Voici le résumé du briefing établi précédemment :
+
+{context_summary}
+
+Ton rôle :
+Complète le briefing avec les spécifications SEO détaillées :
+
+1. Mots-clés secondaires à intégrer (priorisés par pertinence)
+
+2. Recommandations de maillage interne (si applicable)
+
+3. Suggestions de méta-title et méta-description
+
+4. Questions fréquentes (FAQ) à intégrer dans la page
+
+5. Checklist technique (si applicable)
+
+Données SEO disponibles :
+{seo_brief}
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres
+
+Retourne UNIQUEMENT la partie suivante du briefing (en markdown) :
+## SEO & Technique
+[Mots-clés secondaires]
+[Maillage interne]
+[Métag suggestions]
+[FAQ]
+[Checklist technique]
+"""
+
+
+# ── Article Section Generation Prompts ───────────────────────────────────────────
+
+ARTICLE_SECTION_PROMPT = """\
+Voici le briefing complet à suivre :
+
+---BRIEFING---
+{briefing}
+---FIN BRIEFING---
+
+Ta mission : rédiger UNIQUEMENT la section demandée ci-dessous, en respectant
+scrupuleusement le briefing.
+
+Section à rédiger :
+{section_spec}
+
+Principe GEO / AEO obligatoire :
+Cette section doit répondre de manière explicite et complète à une
+intention de recherche précise. Commence par une phrase-réponse directe
+(« la réponse courte d'abord »), puis développe.
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot
+- Phrases naturelles et fluides, sans sur-optimisation du mot-clé
+- Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
+- Ne rédige PAS les autres sections de la page
+
+Retourne UNIQUEMENT le contenu de cette section en markdown.
+"""
+
+
+# ── Helper Functions ─────────────────────────────────────────────────────────────
+
+def _build_context_summary(text: str, max_words: int = 150) -> str:
+    """Build a concise summary of context text for token efficiency."""
+    words = text.split()
+    if len(words) <= max_words:
+        return text
+    return " ".join(words[:max_words]) + "..."
+
+
+def generate_chunked_briefing(
+    keyword: str,
+    site_url: str,
+    country: str,
+    page_type: str,
+    context_doc: str,
+    seo_brief: str,
+    system: str,
+    lang: str = "fr",
+) -> tuple[str, int, int]:
+    """
+    Generate briefing in 3 chunked calls to avoid token limits.
+    Returns (full_briefing, total_input_tokens, total_output_tokens).
+    """
+    parts = []
+    total_in, total_out = 0, 0
+
+    # Part 1: Context & Positionnement
+    logger.info("[ChunkedBriefing] Part 1 — Context & Positionnement")
+    p1 = BRIEFING_PART1_CONTEXT.format(
+        keyword=keyword,
+        site_url=site_url,
+        country=country,
+        page_type=page_type,
+        context_doc=context_doc or "(aucun document fourni)",
+        seo_brief=seo_brief or "(aucune donnée SEO disponible)",
+    )
+    part1, in1, out1 = _call_claude(system, p1, max_tokens=2000)
+    parts.append(part1)
+    total_in += in1
+    total_out += out1
+
+    # Summary for next calls
+    summary1 = _build_context_summary(part1, max_words=100)
+
+    # Part 2: Structure & Guidelines
+    logger.info("[ChunkedBriefing] Part 2 — Structure & Guidelines")
+    p2 = BRIEFING_PART2_STRUCTURE.format(context_summary=summary1)
+    part2, in2, out2 = _call_claude(system, p2, max_tokens=2000)
+    parts.append(part2)
+    total_in += in2
+    total_out += out2
+
+    # Summary for next call
+    summary2 = _build_context_summary(part1 + "\n\n" + part2, max_words=120)
+
+    # Part 3: SEO & Technique
+    logger.info("[ChunkedBriefing] Part 3 — SEO & Technique")
+    p3 = BRIEFING_PART3_SEO.format(
+        context_summary=summary2,
+        seo_brief=seo_brief or "(aucune donnée SEO disponible)",
+    )
+    part3, in3, out3 = _call_claude(system, p3, max_tokens=2000)
+    parts.append(part3)
+    total_in += in3
+    total_out += out3
+
+    full_briefing = "\n\n".join(parts)
+    logger.info("[ChunkedBriefing] Complete — %d total tokens", total_in + total_out)
+    return full_briefing, total_in, total_out
+
+
+def generate_article_by_sections(
+    briefing: str,
+    system: str,
+    h2_sections: list[str],
+) -> tuple[str, int, int]:
+    """
+    Generate article section by section to avoid token limits.
+    h2_sections: list of H2 titles to generate
+    Returns (full_article, total_input_tokens, total_output_tokens).
+    """
+    sections = []
+    total_in, total_out = 0, 0
+
+    for i, h2 in enumerate(h2_sections, 1):
+        logger.info("[ChunkedArticle] Section %d/%d — %s", i, len(h2_sections), h2)
+        section_spec = f"## {h2}\nRédige cette section complète avec ses sous-parties H3 si nécessaire."
+        prompt = ARTICLE_SECTION_PROMPT.format(
+            briefing=briefing,
+            section_spec=section_spec,
+        )
+        section, in_t, out_t = _call_claude(system, prompt, max_tokens=2000)
+        sections.append(section)
+        total_in += in_t
+        total_out += out_t
+
+    full_article = "\n\n".join(sections)
+    logger.info("[ChunkedArticle] Complete — %d sections, %d total tokens", len(h2_sections), total_in + total_out)
+    return full_article, total_in, total_out
+
+
 # ── Claude caller ──────────────────────────────────────────────────────────────
 
 def _call_claude(system: str, user_prompt: str,
