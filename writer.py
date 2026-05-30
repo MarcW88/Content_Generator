@@ -501,6 +501,27 @@ def extract_h2_sections(briefing: str) -> list[str]:
     return [m.strip() for m in matches if m.strip()]
 
 
+def filter_briefing_for_content(briefing: str) -> str:
+    """Filter briefing to remove technical/SEO parts, keep only content-relevant sections."""
+    import re
+    lines = briefing.split('\n')
+    filtered = []
+    skip_section = False
+    skip_keywords = ['seo', 'technique', 'maillage', 'métas', 'faq', 'checklist', 'mots-clés']
+    for line in lines:
+        header_match = re.match(r'^##\s+(.+)$', line, re.IGNORECASE)
+        if header_match:
+            header_text = header_match.group(1).lower()
+            if any(kw in header_text for kw in skip_keywords):
+                skip_section = True
+                continue
+            else:
+                skip_section = False
+        if not skip_section:
+            filtered.append(line)
+    return '\n'.join(filtered)
+
+
 def generate_article_by_sections(
     briefing: str,
     system: str,
@@ -509,33 +530,83 @@ def generate_article_by_sections(
     """
     Generate article section by section to avoid token limits.
     If h2_sections is None, extract them from briefing.
+    Uses 5+ calls with continuation logic.
     Returns (full_article, total_input_tokens, total_output_tokens).
     """
+    # Filter briefing to remove technical/SEO parts
+    filtered_briefing = filter_briefing_for_content(briefing)
+
     if h2_sections is None:
-        h2_sections = extract_h2_sections(briefing)
+        h2_sections = extract_h2_sections(filtered_briefing)
         logger.info("[ChunkedArticle] Extracted %d H2 sections from briefing", len(h2_sections))
 
     if not h2_sections:
         logger.warning("[ChunkedArticle] No H2 sections found, falling back to single call")
-        return _call_claude(system, ARTICLE_PROMPT.format(briefing=briefing, keyword=""), max_tokens=6000)
+        return _call_claude(system, ARTICLE_PROMPT.format(briefing=filtered_briefing, keyword=""), max_tokens=6000)
+
+    # Ensure minimum 5 calls by splitting sections if needed
+    min_calls = 5
+    if len(h2_sections) < min_calls:
+        # Split sections into smaller chunks
+        chunks_per_section = (min_calls + len(h2_sections) - 1) // len(h2_sections)
+        section_chunks = []
+        for h2 in h2_sections:
+            for i in range(chunks_per_section):
+                section_chunks.append((h2, i, chunks_per_section))
+        logger.info("[ChunkedArticle] Splitting %d sections into %d chunks for minimum 5 calls", len(h2_sections), len(section_chunks))
+    else:
+        section_chunks = [(h2, 0, 1) for h2 in h2_sections]
 
     sections = []
-    total_in, total_out = 0, 0
+    total_in, total_out = 0
+    continuation = ""
+    seen_headers = set()
 
-    for i, h2 in enumerate(h2_sections, 1):
-        logger.info("[ChunkedArticle] Section %d/%d — %s", i, len(h2_sections), h2)
-        section_spec = f"## {h2}\nRédige cette section complète avec ses sous-parties H3 si nécessaire."
+    for idx, (h2, chunk_idx, total_chunks) in enumerate(section_chunks, 1):
+        logger.info("[ChunkedArticle] Chunk %d/%d — %s (part %d/%d)", idx, len(section_chunks), h2, chunk_idx + 1, total_chunks)
+
+        if total_chunks > 1:
+            section_spec = f"## {h2}\nRédige la partie {chunk_idx + 1}/{total_chunks} de cette section avec ses sous-parties H3 si nécessaire."
+        else:
+            section_spec = f"## {h2}\nRédige cette section complète avec ses sous-parties H3 si nécessaire."
+
         prompt = ARTICLE_SECTION_PROMPT.format(
-            briefing=briefing,
+            briefing=filtered_briefing,
             section_spec=section_spec,
         )
+        if continuation:
+            prompt = f"{continuation}\n\n{prompt}"
+
         section, in_t, out_t = _call_claude(system, prompt, max_tokens=2000)
+
+        # Post-process: remove duplicate headers
+        if idx > 1:
+            import re
+            lines = section.split('\n')
+            filtered_lines = []
+            for line in lines:
+                header_match = re.match(r'^(#{1,3})\s+(.+)$', line)
+                if header_match:
+                    header_text = header_match.group(2).strip().lower()
+                    if header_text in seen_headers:
+                        continue
+                    seen_headers.add(header_text)
+                filtered_lines.append(line)
+            section = '\n'.join(filtered_lines)
+        else:
+            import re
+            for match in re.finditer(r'^(#{1,3})\s+(.+)$', section, re.MULTILINE):
+                seen_headers.add(match.group(2).strip().lower())
+
         sections.append(section)
         total_in += in_t
         total_out += out_t
 
+        # Prepare continuation instruction
+        continuation = f"CONTINUE from previous output. DO NOT repeat headers already written. Continue directly with the next content.\n\nPrevious output ended with:\n{section[-500:]}"
+
     full_article = "\n\n".join(sections)
-    logger.info("[ChunkedArticle] Complete — %d sections, %d total tokens", len(h2_sections), total_in + total_out)
+    logger.info("[ChunkedArticle] Complete — %d chunks, %d total tokens", len(section_chunks), total_in + total_out)
     return full_article, total_in, total_out
 
 
