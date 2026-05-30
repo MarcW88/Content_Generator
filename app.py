@@ -27,107 +27,110 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CSS — full backoffice, no sidebar
+# CSS — light backoffice theme, no sidebar
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-  /* Hide sidebar toggle + sidebar entirely */
+  /* Hide sidebar */
   [data-testid="collapsedControl"] { display: none !important; }
   section[data-testid="stSidebar"]  { display: none !important; }
 
-  .stApp { background: #0d1117; }
+  /* Base */
+  .stApp { background: #f4f5f7; }
+  .stApp p, .stApp li, .stApp label { color: #1a1d2e !important; }
+  .stApp h1, .stApp h2, .stApp h3 { color: #1a1d2e !important; }
 
-  /* Top nav bar */
+  /* Top nav */
   .nav-bar {
     display: flex; align-items: center; justify-content: space-between;
-    background: #161b22; border-bottom: 1px solid #21262d;
-    padding: 0 32px; height: 56px; margin-bottom: 28px;
+    background: #ffffff; border-bottom: 1px solid #e2e5ed;
+    padding: 0 32px; height: 58px; margin-bottom: 28px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
   }
-  .nav-brand { color: #e6edf3; font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
-  .nav-brand span { color: #58a6ff; }
-  .nav-items { display: flex; gap: 4px; }
-  .nav-item {
-    color: #8b949e; font-size: 13px; font-weight: 500;
-    padding: 6px 14px; border-radius: 6px; cursor: pointer;
-    border: 1px solid transparent; transition: all 0.15s;
-    text-decoration: none;
-  }
-  .nav-item:hover  { color: #e6edf3; background: #21262d; }
-  .nav-item.active { color: #e6edf3; background: #21262d; border-color: #30363d; }
+  .nav-brand { color: #1a1d2e; font-size: 16px; font-weight: 800; }
+  .nav-brand span { color: #4f6ef7; }
 
-  /* Cards */
+  /* KPI cards */
   .kpi-card {
-    background: #161b22; border: 1px solid #21262d; border-radius: 10px;
-    padding: 20px 24px;
+    background: #ffffff; border: 1px solid #e2e5ed; border-radius: 12px;
+    padding: 20px 24px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
   }
-  .kpi-label { color: #8b949e; font-size: 11px; font-weight: 600;
-               letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; }
-  .kpi-value { color: #e6edf3; font-size: 26px; font-weight: 700; line-height: 1; }
-  .kpi-sub   { color: #58a6ff; font-size: 12px; margin-top: 6px; }
+  .kpi-label { color: #6b7280; font-size: 11px; font-weight: 700;
+               letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
+  .kpi-value { color: #1a1d2e; font-size: 26px; font-weight: 800; line-height: 1; }
+  .kpi-sub   { color: #4f6ef7; font-size: 12px; margin-top: 6px; }
 
-  /* Pass cards */
-  .pass-card {
-    background: #161b22; border: 1px solid #21262d; border-radius: 8px;
-    padding: 14px 16px; text-align: center;
+  /* Pipeline stepper */
+  .pipeline-wrapper {
+    background: #ffffff; border: 1px solid #e2e5ed; border-radius: 14px;
+    padding: 28px 32px; margin: 20px 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
   }
-  .pass-label { color: #8b949e; font-size: 11px; font-weight: 600; text-transform: uppercase; }
-  .pass-status { font-size: 22px; margin: 6px 0; }
-  .pass-detail { color: #8b949e; font-size: 11px; }
-
-  /* Article card in library */
-  .article-card {
-    background: #161b22; border: 1px solid #21262d; border-radius: 10px;
-    padding: 18px 22px; margin-bottom: 12px;
-    transition: border-color 0.15s;
+  .pipeline-title {
+    font-size: 13px; font-weight: 700; color: #6b7280;
+    text-transform: uppercase; letter-spacing: .08em; margin-bottom: 22px;
   }
-  .article-card:hover { border-color: #58a6ff; }
-  .article-title { color: #e6edf3; font-size: 15px; font-weight: 600; margin-bottom: 6px; }
-  .article-meta  { color: #8b949e; font-size: 12px; }
-  .tag {
-    display: inline-block; background: #21262d; border-radius: 20px;
-    padding: 2px 10px; font-size: 11px; color: #58a6ff; margin-right: 6px;
+  .step-row { display: flex; gap: 12px; align-items: stretch; }
+  .step-box {
+    flex: 1; background: #f8f9fc; border: 2px solid #e2e5ed;
+    border-radius: 10px; padding: 16px 12px; text-align: center;
+    transition: all .2s;
   }
+  .step-box.running {
+    background: #eff3ff; border-color: #4f6ef7;
+    box-shadow: 0 0 0 3px rgba(79,110,247,.12);
+  }
+  .step-box.done    { background: #f0fdf4; border-color: #22c55e; }
+  .step-box.error   { background: #fff5f5; border-color: #ef4444; }
+  .step-num   { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; margin-bottom: 8px; }
+  .step-icon  { font-size: 26px; margin-bottom: 6px; }
+  .step-name  { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 4px; }
+  .step-detail{ font-size: 11px; color: #6b7280; min-height: 16px; }
+  .step-cost  { font-size: 11px; color: #22c55e; font-weight: 600; margin-top: 4px; }
 
   /* Cost badge */
   .cost-badge {
     display: inline-flex; align-items: center; gap: 6px;
-    background: #0d1117; border: 1px solid #30363d; border-radius: 20px;
-    padding: 4px 12px; font-size: 12px; color: #3fb950;
-  }
-
-  /* Inputs */
-  .stTextInput > div > div > input, .stTextArea textarea {
-    background: #161b22 !important; border: 1px solid #30363d !important;
-    color: #e6edf3 !important; border-radius: 6px !important;
-  }
-  .stSelectbox > div > div { background: #161b22 !important; border-color: #30363d !important; }
-
-  /* Buttons */
-  .stButton > button[kind="primary"] {
-    background: #238636 !important; border-color: #2ea043 !important;
-    color: #fff !important; font-weight: 600 !important;
-  }
-  .stButton > button[kind="primary"]:hover { background: #2ea043 !important; }
-  div[data-testid="stDownloadButton"] button {
-    background: #21262d !important; border: 1px solid #30363d !important;
-    color: #e6edf3 !important; font-weight: 500 !important;
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 20px;
+    padding: 5px 14px; font-size: 13px; font-weight: 700; color: #15803d;
   }
 
   /* Section header */
   .section-hdr {
-    color: #8b949e; font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
-    text-transform: uppercase; border-bottom: 1px solid #21262d;
-    padding-bottom: 8px; margin: 24px 0 16px;
+    color: #6b7280; font-size: 11px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; border-bottom: 1px solid #e2e5ed;
+    padding-bottom: 8px; margin: 28px 0 18px;
   }
 
-  /* Profile chip */
+  /* API chips */
   .profile-chip {
     display: inline-flex; align-items: center; gap: 6px;
-    background: #161b22; border: 1px solid #21262d; border-radius: 6px;
-    padding: 4px 10px; font-size: 12px; color: #e6edf3; margin: 3px;
+    background: #f8f9fc; border: 1px solid #e2e5ed; border-radius: 8px;
+    padding: 6px 14px; font-size: 13px; color: #374151; margin: 4px;
+    font-weight: 500;
   }
-  .chip-green { border-color: #3fb950; color: #3fb950; }
-  .chip-red   { border-color: #f85149; color: #f85149; }
+  .chip-green { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+  .chip-red   { background: #fff5f5; border-color: #fca5a5; color: #dc2626; }
+
+  /* Dataframe + expanders */
+  [data-testid="stDataFrame"] { background: #fff; border-radius: 10px; }
+  details > summary { color: #1a1d2e !important; font-weight: 600; }
+
+  /* Download buttons */
+  div[data-testid="stDownloadButton"] button {
+    background: #ffffff !important; border: 1px solid #d1d5db !important;
+    color: #374151 !important; font-weight: 600 !important;
+  }
+  div[data-testid="stDownloadButton"] button:hover {
+    background: #f3f4f6 !important;
+  }
+
+  /* Primary button */
+  .stButton > button[kind="primary"] {
+    background: #4f6ef7 !important; border-color: #4f6ef7 !important;
+    color: #fff !important; font-weight: 700 !important; border-radius: 8px !important;
+  }
+  .stButton > button[kind="primary"]:hover { background: #3b55e0 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -308,129 +311,194 @@ elif page == "generate":
 
         import json as _json
 
-        # ── Progress ──────────────────────────────────────────────────────────
-        progress_bar    = st.progress(0, text="Initialisation…")
-        cost_placeholder = st.empty()
-        c1b, c2b, c3b, c4b = st.columns(4)
-        containers = {1: c1b.empty(), 2: c2b.empty(), 3: c3b.empty(), 4: c4b.empty()}
-        labels = {1: "Introduction", 2: "Plan H2/H3", 3: "Corps", 4: "Méta + Révision"}
-        icons  = {"pending":"⬜", "running":"🔄", "done":"✅", "error":"❌"}
-        colors = {"pending":"#8b949e","running":"#58a6ff","done":"#3fb950","error":"#f85149"}
-
+        # ═══════════════════════════════════════════════════════════════
+        # Pipeline stepper — 6 étapes visibles
+        # ═══════════════════════════════════════════════════════════════
+        STEPS = [
+            ("Style",    "🎨", "Analyse du ton"),
+            ("SEO",      "📊", "Données SERP"),
+            ("Passe 1",  "✏️",  "Introduction"),
+            ("Passe 2",  "🗂️",  "Plan H2/H3"),
+            ("Passe 3",  "📝", "Corps"),
+            ("Passe 4",  "🔍", "Méta + Révision"),
+        ]
+        states  = ["pending"] * 6   # pending | running | done | error
+        details = [""] * 6
+        costs   = [0.0] * 6
         running_cost = [0.0]
 
-        def render_pass_card(n, state, detail="", cost_delta=0.0):
-            running_cost[0] += cost_delta
-            containers[n].markdown(
-                f'<div class="pass-card">'
-                f'<div class="pass-label">Passe {n}</div>'
-                f'<div class="pass-status">{icons[state]}</div>'
-                f'<div style="color:{colors[state]};font-size:13px;font-weight:600">{labels[n]}</div>'
-                f'<div class="pass-detail">{detail}</div>'
+        stepper_ph  = st.empty()
+        progress_bar = st.progress(0)
+        cost_ph      = st.empty()
+        log_ph       = st.empty()
+
+        def _stepper():
+            icon_map = {"pending":"○", "running":"◉", "done":"✓", "error":"✗"}
+            css_map  = {"pending":"", "running":" running", "done":" done", "error":" error"}
+            boxes = ""
+            for i, (short, emoji, name) in enumerate(STEPS):
+                st_cls  = css_map[states[i]]
+                ic      = icon_map[states[i]]
+                cost_ln = f'<div class="step-cost">{format_usd(costs[i])}</div>' if costs[i] > 0 else ""
+                boxes  += (
+                    f'<div class="step-box{st_cls}">'
+                    f'<div class="step-num">{short} {ic}</div>'
+                    f'<div class="step-icon">{emoji}</div>'
+                    f'<div class="step-name">{name}</div>'
+                    f'<div class="step-detail">{details[i]}</div>'
+                    f'{cost_ln}</div>'
+                )
+            stepper_ph.markdown(
+                f'<div class="pipeline-wrapper">'
+                f'<div class="pipeline-title">Progression de la génération</div>'
+                f'<div class="step-row">{boxes}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
-            cost_placeholder.markdown(
-                f'<div style="text-align:right;margin-bottom:8px">'
+            cost_ph.markdown(
+                f'<div style="text-align:right;margin:-8px 0 12px">'
                 f'<span class="cost-badge">💰 Coût en cours : {format_usd(running_cost[0])}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
-        for i in range(1, 5):
-            render_pass_card(i, "pending")
+        def _set(i, state, detail="", cost=0.0):
+            states[i]  = state
+            details[i] = detail
+            costs[i]   = cost
+            running_cost[0] += cost
+            _stepper()
 
-        # ── Style profile ─────────────────────────────────────────────────────
-        progress_bar.progress(5, text="🎨 Style profile…")
-        with st.status("🎨 Analyse du style éditorial", expanded=False) as s1:
+        _stepper()  # render initial state
+
+        # ── Étape 0 — Style profile ───────────────────────────────────────────
+        _set(0, "running", "Scraping + Claude Opus…")
+        progress_bar.progress(5)
+        with log_ph.status("🎨 Étape 1/6 — Analyse du style éditorial", expanded=True) as s_log:
             try:
                 from tone_analyzer import build_style_profile, style_profile_to_system_context
                 profile_data, sp_in, sp_out = build_style_profile(site_url, force_refresh=refresh_style)
                 style_ctx = style_profile_to_system_context(profile_data)
-                if sp_in:
-                    running_cost[0] += PassCost(config.CLAUDE_OPUS, sp_in, sp_out).usd
-                st.write(f"✅ {len(profile_data)} attributs extraits {'(cache)' if not sp_in else '(nouveau)'}")
-                s1.update(label="🎨 Style profile — ✅", state="complete")
+                sp_cost = PassCost(config.CLAUDE_OPUS, sp_in, sp_out).usd if sp_in else 0
+                st.write(f"Site analysé : {site_url}")
+                st.write(f"{len(profile_data)} attributs extraits {'(depuis cache)' if not sp_in else f'— {sp_in:,} tokens lus'}")
+                s_log.update(label="🎨 Style éditorial — ✅ terminé", state="complete", expanded=False)
+                _set(0, "done", "Cache" if not sp_in else f"{sp_in:,} tok", sp_cost)
             except Exception as e:
-                s1.update(label=f"🎨 Style profile — ❌", state="error")
+                s_log.update(label="🎨 Style — ❌ erreur", state="error")
+                _set(0, "error", str(e)[:30])
                 st.error(str(e)); st.stop()
 
-        # ── SEO intelligence ──────────────────────────────────────────────────
-        progress_bar.progress(18, text="📊 SEO intelligence…")
-        with st.status("📊 Données SEO", expanded=False) as s2:
+        # ── Étape 1 — SEO intelligence ────────────────────────────────────────
+        _set(1, "running", "DataForSEO + GSC…")
+        progress_bar.progress(16)
+        with log_ph.status("📊 Étape 2/6 — Données SEO", expanded=True) as s_log:
             try:
                 from seo_intelligence import gather_seo_intelligence, seo_intel_to_brief
                 intel     = gather_seo_intelligence(keyword)
                 seo_brief = seo_intel_to_brief(intel)
-                st.write(f"✅ {len(intel.serp_top10)} SERP · {len(intel.paa_questions)} PAA · "
-                         f"{len(intel.keyword_cluster.secondary)} KW secondaires")
+                st.write(f"Mot-clé : {keyword}")
+                st.write(f"{len(intel.serp_top10)} résultats SERP analysés")
+                st.write(f"{len(intel.paa_questions)} questions PAA extraites")
+                st.write(f"{len(intel.keyword_cluster.secondary)} mots-clés secondaires")
                 if intel.cannibalisation_risk:
-                    st.write(f"⚠️ {len(intel.cannibalisation_risk)} risques cannibalisation")
-                s2.update(label="📊 SEO — ✅", state="complete")
+                    st.warning(f"⚠️ {len(intel.cannibalisation_risk)} risques de cannibalisation détectés")
+                s_log.update(label="📊 SEO — ✅ terminé", state="complete", expanded=False)
+                _set(1, "done", f"{len(intel.paa_questions)} PAA")
             except Exception as e:
                 st.write(f"⚠️ SEO partiel : {e}")
-                s2.update(label="📊 SEO — ⚠️ partiel", state="complete")
+                s_log.update(label="📊 SEO — ⚠️ partiel", state="complete", expanded=False)
                 from seo_intelligence import SEOIntelligence, KeywordCluster, seo_intel_to_brief
                 intel     = SEOIntelligence(keyword=keyword, keyword_cluster=KeywordCluster(primary=keyword))
                 seo_brief = seo_intel_to_brief(intel)
+                _set(1, "done", "partiel")
 
-        # ── Writing 4 passes ──────────────────────────────────────────────────
+        # ── Passes 1-4 ────────────────────────────────────────────────────────
         from writer import (
             _build_system, _call_claude,
             PASS1_PROMPT, PASS2_PROMPT, PASS3_PROMPT, PASS4_PROMPT,
             ArticleOutput,
         )
-        article        = ArticleOutput(keyword=keyword, site_url=site_url)
-        system         = _build_system(style_ctx, seo_brief)
+        article = ArticleOutput(keyword=keyword, site_url=site_url)
+        system  = _build_system(style_ctx, seo_brief)
 
-        def _run_pass(n, prompt, pct, msg):
-            render_pass_card(n, "running")
-            progress_bar.progress(pct, text=msg)
-            text, in_t, out_t = _call_claude(system, prompt)
-            delta = PassCost(config.CLAUDE_SONNET, in_t, out_t).usd
-            article.cost.passes.append(PassCost(config.CLAUDE_SONNET, in_t, out_t))
-            return text, delta
+        PASS_CFG = [
+            (2, 35, PASS1_PROMPT.format(keyword=keyword),                          "Étape 3/6 — Introduction",       "intro"),
+            (3, 55, None,                                                            "Étape 4/6 — Plan H2/H3",         "plan"),
+            (4, 72, None,                                                            "Étape 5/6 — Corps de l'article", "body"),
+            (5, 88, None,                                                            "Étape 6/6 — Méta + Révision",    "meta"),
+        ]
 
-        try:
-            text, d = _run_pass(1, PASS1_PROMPT.format(keyword=keyword), 35, "✍️ Passe 1…")
-            article.introduction = text
-            render_pass_card(1, "done", f"{_count_words(text)} mots", d)
-        except Exception as e:
-            render_pass_card(1, "error", str(e)[:35]); st.stop()
+        for step_i, pct, prompt_tpl, label, role in PASS_CFG:
+            pass_n = step_i - 1  # pass number 1-4
+            _set(step_i, "running", "Claude Sonnet…")
+            progress_bar.progress(pct)
 
-        try:
-            text, d = _run_pass(2, PASS2_PROMPT.format(pass1_output=article.introduction), 52, "🗂️ Passe 2…")
-            article.plan_h2_h3 = text
-            render_pass_card(2, "done", f"{text.count('##')} sections", d)
-        except Exception as e:
-            render_pass_card(2, "error", str(e)[:35]); st.stop()
+            # Build prompt dynamically for passes 2-4
+            if role == "plan":
+                prompt_tpl = PASS2_PROMPT.format(pass1_output=article.introduction)
+            elif role == "body":
+                prompt_tpl = PASS3_PROMPT.format(
+                    pass1_output=article.introduction,
+                    pass2_output=article.plan_h2_h3,
+                    target_word_count=config.TARGET_WORD_COUNT,
+                )
+            elif role == "meta":
+                prompt_tpl = PASS4_PROMPT.format(full_draft=f"{article.introduction}\n\n{article.body}")
 
-        try:
-            text, d = _run_pass(3, PASS3_PROMPT.format(
-                pass1_output=article.introduction,
-                pass2_output=article.plan_h2_h3,
-                target_word_count=config.TARGET_WORD_COUNT), 68, "📝 Passe 3…")
-            article.body = text
-            render_pass_card(3, "done", f"{_count_words(text)} mots", d)
-        except Exception as e:
-            render_pass_card(3, "error", str(e)[:35]); st.stop()
+            with log_ph.status(f"✍️ {label}", expanded=True) as s_log:
+                try:
+                    text, in_t, out_t = _call_claude(system, prompt_tpl)
+                    p_cost = PassCost(config.CLAUDE_SONNET, in_t, out_t).usd
+                    article.cost.passes.append(PassCost(config.CLAUDE_SONNET, in_t, out_t))
 
-        full_draft = f"{article.introduction}\n\n{article.body}"
-        try:
-            raw, d = _run_pass(4, PASS4_PROMPT.format(full_draft=full_draft), 85, "🔍 Passe 4…")
-            clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```")
-            p4    = _json.loads(clean)
-            article.meta_title       = p4.get("meta_title", "")
-            article.meta_description = p4.get("meta_description", "")
-            revised                  = p4.get("revised_article", full_draft)
-            article.full_article     = f"{revised}\n\n{p4.get('cta_final','')}".strip()
-            render_pass_card(4, "done", f"{len(article.meta_title)} car.", d)
-        except Exception as e:
-            render_pass_card(4, "error", str(e)[:35])
-            article.full_article = full_draft
+                    st.write(f"Tokens envoyés : {in_t:,}   |   Tokens reçus : {out_t:,}")
+
+                    if role == "intro":
+                        article.introduction = text
+                        wc = _count_words(text)
+                        st.write(f"Introduction rédigée — {wc} mots")
+                        _set(step_i, "done", f"{wc} mots", p_cost)
+
+                    elif role == "plan":
+                        article.plan_h2_h3 = text
+                        nb = text.count("##")
+                        st.write(f"Plan généré — {nb} sections H2/H3")
+                        with st.expander("Voir le plan", expanded=False):
+                            st.code(text, language="markdown")
+                        _set(step_i, "done", f"{nb} sections", p_cost)
+
+                    elif role == "body":
+                        article.body = text
+                        wc = _count_words(text)
+                        st.write(f"Corps rédigé — {wc} mots")
+                        _set(step_i, "done", f"{wc} mots", p_cost)
+
+                    elif role == "meta":
+                        clean = text.strip().lstrip("```json").lstrip("```").rstrip("```")
+                        p4 = _json.loads(clean)
+                        article.meta_title       = p4.get("meta_title", "")
+                        article.meta_description = p4.get("meta_description", "")
+                        revised                  = p4.get("revised_article", f"{article.introduction}\n\n{article.body}")
+                        article.full_article     = f"{revised}\n\n{p4.get('cta_final','')}".strip()
+                        st.write(f"Meta title : {article.meta_title}")
+                        st.write(f"Meta desc  : {article.meta_description}")
+                        _set(step_i, "done", f"{len(article.meta_title)} car.", p_cost)
+
+                    s_log.update(label=f"✅ {label} — terminé", state="complete", expanded=False)
+
+                except Exception as e:
+                    s_log.update(label=f"❌ {label} — erreur", state="error")
+                    _set(step_i, "error", str(e)[:30])
+                    if role != "meta":
+                        st.error(str(e)); st.stop()
+                    else:
+                        article.full_article = f"{article.introduction}\n\n{article.body}"
 
         article.cost.dataforseo_tasks = 3 if config.DATAFORSEO_LOGIN else 0
-        progress_bar.progress(100, text="✅ Terminé !")
+        progress_bar.progress(100)
+        log_ph.success(f"✅ Article généré — {_count_words(article.full_article)} mots · Coût réel : {format_usd(article.cost.total_usd)}")
+        cost_ph.empty()
 
         # ── Save ──────────────────────────────────────────────────────────────
         os.makedirs(config.OUTPUT_DIR, exist_ok=True)
