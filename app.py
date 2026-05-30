@@ -832,15 +832,20 @@ elif page == "generate":
                 )
             except Exception:
                 import html as _html_mod
-                html_body = "<pre>" + _html_mod.escape(pl["full_article"] or "") + "</pre>"
+                import markdown as _md
+                html_body = _md.markdown(pl["full_article"] or "", extensions=['extra', 'tables'])
             html_content = f"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8">
 <title>{pl['meta_title'] or pl['keyword']}</title>
 <meta name="description" content="{pl['meta_description']}">
 <style>
-  body {{ font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; color: #1a1d2e; line-height: 1.7; }}
-  h1,h2,h3 {{ color: #1a1d2e; }} h1 {{ font-size: 2em; }} h2 {{ font-size: 1.4em; }}
+  body {{ font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; color: #1a1d2e; line-height: 1.7; padding: 20px; }}
+  h1,h2,h3 {{ color: #1a1d2e; }} h1 {{ font-size: 2em; }} h2 {{ font-size: 1.4em; }} h3 {{ font-size: 1.2em; }}
   p {{ margin: 0 0 1em; }} ul,ol {{ padding-left: 1.4em; }} a {{ color: #3b82f6; }}
+  blockquote {{ border-left: 4px solid #e5e7eb; padding-left: 1em; margin: 1em 0; color: #6b7280; }}
+  code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }}
+  pre {{ background: #1f2937; color: #f9fafb; padding: 1em; border-radius: 8px; overflow-x: auto; }}
+  pre code {{ background: none; padding: 0; }}
 </style></head><body>
 {html_body}
 </body></html>"""
