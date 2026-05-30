@@ -278,14 +278,16 @@ Ton rôle :
 Continue le plan de rédaction structuré à partir de là où il s'est arrêté.
 
 CRITIQUE : Tu dois CONTINUER le plan existant, PAS créer un nouveau plan.
-Si le plan précédent contenait des sections H2/H3, continue avec les sections suivantes logiques.
+Le plan de rédaction doit être un SEUL document cohérent, PAS plusieurs structures séparées.
 NE REPETE PAS le header ## Plan de Rédaction.
 NE REPETE PAS les sections H2/H3 déjà écrites ci-dessus.
-NE crée PAS une nouvelle Introduction, Conclusion, FAQ ou toute autre section déjà présente.
+NE crée PAS une nouvelle Introduction, Conclusion, FAQ, Glossaire ou toute autre section déjà présente.
 NE crée PAS une nouvelle structure complète avec ses propres sections.
 
+INSTRUCTION PRÉCISE : Continue le plan en ajoutant les sections H2/H3 suivantes logiques après celles déjà écrites.
 Si le plan contient déjà une Conclusion, ne génère PAS une nouvelle Conclusion.
 Si le plan contient déjà des H2, continue avec les H2 suivants logiques.
+Si le plan est déjà complet (8-12 sections H2), tu peux arrêter sans ajouter plus de sections.
 
 À générer (en markdown) :
 Continue le plan de rédaction structuré H2 / H3 où chaque section précise
@@ -299,7 +301,9 @@ Règles absolues :
 - Phrases naturelles et fluides
 - NE JAMAIS répéter les headers déjà écrits
 - NE JAMAIS créer une nouvelle structure de plan complète
-- NE JAMAIS générer de nouvelles sections si elles existent déjà (Introduction, Conclusion, FAQ, etc.)
+- NE JAMAIS générer de nouvelles sections si elles existent déjà (Introduction, Conclusion, FAQ, Glossaire, etc.)
+- Continue UNIQUEMENT avec de nouvelles sections H2/H3 logiques
+- Le plan doit rester un document unique et cohérent
 
 Retourne UNIQUEMENT la continuation du plan de rédaction (sans header ## Plan de Rédaction).
 """
