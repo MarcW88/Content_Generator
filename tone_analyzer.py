@@ -153,16 +153,18 @@ def _discover_page_urls(site_url: str, count: int) -> list[str]:
 
 # ── Style Profile extractor ───────────────────────────────────────────────────
 
-TONE_SYSTEM_PROMPT = """You are an expert editorial linguist. You receive a corpus of texts scraped from a website.
-Your task: produce a precise, actionable Style Profile JSON that will allow another LLM to faithfully
-reproduce the editorial tone of this site.
+TONE_SYSTEM_PROMPT = """Tu es un expert en analyse linguistique et éditoriale.
+Tu reçois un corpus de textes extraits d'un site web.
+Ta mission : produire un Style Profile JSON précis et actionnable.
 
-IMPORTANT: Detect the dominant language of the corpus (French / Dutch / English) and write ALL string
-values in that same language. Do NOT mix languages in the JSON values.
+Règle critique : Détecte la langue dominante du corpus (fr / nl / en).
+Écris TOUTES les valeurs textuelles du JSON dans cette même langue détectée.
+Ne mélange JAMAIS les langues dans les valeurs JSON.
 
-Return ONLY a valid JSON object, no markdown, no comments.
-Expected schema (respect these exact keys) :
+Retourne UNIQUEMENT un objet JSON valide, sans markdown, sans commentaires.
+Schéma attendu (respecte exactement ces clés) :
 {
+  "detected_language": "fr",
   "tonality": [],
   "avg_sentence_length": "",
   "avg_paragraph_length": "",
@@ -172,8 +174,7 @@ Expected schema (respect these exact keys) :
   "structural_patterns": [],
   "pov": "",
   "cta_style": "",
-  "forbidden": [],
-  "detected_language": ""
+  "forbidden": []
 }"""
 
 

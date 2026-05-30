@@ -45,11 +45,18 @@ class ArticleOutput:
 
 # ── Shared prompt builder ──────────────────────────────────────────────────────
 
-def _build_system(style_context: str, seo_brief: str) -> str:
-    return f"""Tu es un rédacteur web expert francophone.
-Tu rédiges TOUJOURS en français, en respectant scrupuleusement le Style Profile ci-dessous.
+_LANG_RULES = {
+    "fr": "Tu es un rédacteur web SEO expert. Tu rédiges TOUJOURS en français.",
+    "nl": "Je bent een expert SEO-redacteur. Je schrijft ALTIJD in het Nederlands.",
+    "en": "You are an expert SEO writer. You ALWAYS write in English.",
+}
+
+
+def _build_system(style_context: str, seo_brief: str, lang: str = "fr") -> str:
+    lang_rule = _LANG_RULES.get(lang, _LANG_RULES["fr"])
+    return f"""{lang_rule}
 Tu n'ajoutes JAMAIS de contenu générique ni de remplissage.
-Chaque phrase doit apporter de la valeur.
+Chaque phrase doit apporter de la valeur factuelle ou pratique.
 
 {style_context}
 

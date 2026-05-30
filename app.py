@@ -518,6 +518,7 @@ elif page == "generate":
                 "geo_check":        [],
                 "internal_link_suggestions": [],
                 "system_prompt":    None,
+                "lang":             "fr",
                 # stepper display
                 "states":        ["pending"] * 5,
                 "details":       [""] * 5,
@@ -721,8 +722,11 @@ elif page == "generate":
                         sp_cost   = PassCost(config.CLAUDE_OPUS, sp_in, sp_out).usd if sp_in else 0
                         pl["style_profile"] = profile_data
                         pl["style_ctx"]     = style_ctx
+                        detected_lang = str(profile_data.get("detected_language", "fr")).lower()[:2]
+                        pl["lang"] = detected_lang if detected_lang in ("fr", "nl", "en") else "fr"
                         st.write(f"✅ {len(profile_data)} attributs extraits "
-                                 f"{'(cache)' if not sp_in else f'— {sp_in:,} tokens input'}")
+                                 f"{'(cache)' if not sp_in else f'— {sp_in:,} tokens input'} "
+                                 f"· langue : {pl['lang']}")
                         detail = "cache" if not sp_in else f"{sp_in:,} tok"
                         _cost  = sp_cost
 
@@ -771,7 +775,8 @@ elif page == "generate":
                         )
                         if pl["system_prompt"] is None:
                             pl["system_prompt"] = _build_system(
-                                pl["style_ctx"] or "", pl["seo_brief"] or "")
+                                pl["style_ctx"] or "", pl["seo_brief"] or "",
+                                lang=pl.get("lang", "fr"))
                         system = pl["system_prompt"]
 
                         if s == 2:  # Briefing & plan

@@ -188,9 +188,9 @@ def _parse_kw_items(items: list[dict], cluster: KeywordCluster,
             continue
         seen.add(kw)
         count += 1
-        if vol >= 500:
+        if vol >= 100:
             cluster.secondary.append(kw)
-        elif vol >= 50:
+        elif vol >= 20:
             cluster.lsi.append(kw)
         else:
             cluster.long_tail.append(kw)
@@ -250,6 +250,34 @@ def fetch_keyword_cluster(keyword: str) -> KeywordCluster:
         logger.info("[SEO] related_keywords — %d items parsed", len(items))
     except Exception as exc:
         logger.warning("related_keywords failed: %s", exc)
+
+    # ── Fallback : Claude semantic expansion when DFS yields < 5 keywords ──────
+    total = len(cluster.secondary) + len(cluster.lsi) + len(cluster.long_tail)
+    if total < 5 and config.ANTHROPIC_API_KEY:
+        try:
+            import anthropic as _anthropic
+            client = _anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+            msg = client.messages.create(
+                model=config.CLAUDE_SONNET,
+                max_tokens=400,
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        f"Donne-moi 15 variantes sémantiques du mot-clé '{keyword}' "
+                        f"(synonymes, expressions longue traîne, questions, entités liées). "
+                        f"Réponds UNIQUEMENT avec une liste de mots-clés séparés par des virgules, "
+                        f"sans numérotation ni explication. Langue : même que le mot-clé."
+                    ),
+                }],
+            )
+            raw = msg.content[0].text.strip()
+            for kw in [k.strip() for k in raw.split(",") if k.strip()]:
+                if kw.lower() != keyword.lower() and kw not in seen:
+                    seen.add(kw)
+                    cluster.lsi.append(kw)
+            logger.info("[SEO] Claude fallback keywords — %d ajoutés", len(cluster.lsi))
+        except Exception as exc:
+            logger.warning("Claude keyword fallback failed: %s", exc)
 
     return cluster
 
