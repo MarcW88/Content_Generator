@@ -67,6 +67,7 @@ class SEOIntelligence:
     gsc_opportunities: list[GSCPage]    = field(default_factory=list)
     recommended_h2: list[str]           = field(default_factory=list)
     meta_title_examples: list[str]      = field(default_factory=list)
+    errors: list[str]                   = field(default_factory=list)
 
 
 # ── DataForSEO helpers ────────────────────────────────────────────────────────
@@ -299,18 +300,27 @@ def gather_seo_intelligence(keyword: str) -> SEOIntelligence:
     """
     intel = SEOIntelligence(keyword=keyword)
 
+    if not config.DATAFORSEO_LOGIN or not config.DATAFORSEO_PASSWORD:
+        intel.errors.append("DATAFORSEO_LOGIN ou DATAFORSEO_PASSWORD manquant dans les secrets")
+        intel.keyword_cluster = KeywordCluster(primary=keyword)
+        return intel
+
     logger.info("[SEO] Fetching SERP + PAA for: %s", keyword)
     try:
         intel.serp_top10, intel.paa_questions = fetch_serp(keyword)
         intel.meta_title_examples = [r.title for r in intel.serp_top10[:3]]
     except Exception as exc:
-        logger.warning("SERP fetch failed: %s", exc)
+        msg = f"SERP/PAA : {exc}"
+        logger.warning(msg)
+        intel.errors.append(msg)
 
     logger.info("[SEO] Fetching keyword cluster …")
     try:
         intel.keyword_cluster = fetch_keyword_cluster(keyword)
     except Exception as exc:
-        logger.warning("Keyword cluster failed: %s", exc)
+        msg = f"Keyword cluster : {exc}"
+        logger.warning(msg)
+        intel.errors.append(msg)
         intel.keyword_cluster = KeywordCluster(primary=keyword)
 
     logger.info("[SEO] Fetching GSC data …")

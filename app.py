@@ -518,28 +518,31 @@ elif page == "generate":
                         _cost  = sp_cost
 
                     elif s == 1:
-                        from seo_intelligence import (gather_seo_intelligence,
-                                                      seo_intel_to_brief,
-                                                      SEOIntelligence, KeywordCluster)
-                        try:
-                            intel     = gather_seo_intelligence(pl["keyword"])
-                            seo_brief = seo_intel_to_brief(intel)
-                            st.write(f"{len(intel.serp_top10)} SERP · "
-                                     f"{len(intel.paa_questions)} PAA · "
-                                     f"{len(intel.keyword_cluster.secondary)} KW sec.")
-                            if intel.cannibalisation_risk:
-                                st.warning(f"⚠️ {len(intel.cannibalisation_risk)} risques cannibalisation")
-                            pl["intel_paa"]       = intel.paa_questions
-                            pl["intel_secondary"] = intel.keyword_cluster.secondary
-                            pl["intel_cannib"]    = [p.url for p in intel.cannibalisation_risk]
-                        except Exception as seo_err:
-                            st.write(f"⚠️ SEO partiel : {seo_err}")
-                            intel     = SEOIntelligence(keyword=pl["keyword"],
-                                                        keyword_cluster=KeywordCluster(primary=pl["keyword"]))
-                            seo_brief = seo_intel_to_brief(intel)
-                            pl["intel_paa"] = []
-                        pl["seo_brief"] = seo_brief
-                        detail = f"{len(pl['intel_paa'])} PAA"
+                        from seo_intelligence import gather_seo_intelligence, seo_intel_to_brief
+
+                        if config.DATAFORSEO_LOGIN:
+                            st.write(f"🔑 DataForSEO login : `{config.DATAFORSEO_LOGIN[:20]}…`")
+                        else:
+                            st.warning("⚠️ DATAFORSEO_LOGIN manquant — données SEO ignorées")
+
+                        intel     = gather_seo_intelligence(pl["keyword"])
+                        seo_brief = seo_intel_to_brief(intel)
+
+                        # Affiche les erreurs réelles si présentes
+                        for err in intel.errors:
+                            st.error(f"❌ {err}")
+
+                        st.write(f"{len(intel.serp_top10)} SERP · "
+                                 f"{len(intel.paa_questions)} PAA · "
+                                 f"{len(intel.keyword_cluster.secondary)} KW sec.")
+                        if intel.cannibalisation_risk:
+                            st.warning(f"⚠️ {len(intel.cannibalisation_risk)} risques cannibalisation")
+
+                        pl["intel_paa"]       = intel.paa_questions
+                        pl["intel_secondary"] = intel.keyword_cluster.secondary
+                        pl["intel_cannib"]    = [p.url for p in intel.cannibalisation_risk]
+                        pl["seo_brief"]       = seo_brief
+                        detail = f"{len(pl['intel_paa'])} PAA" if pl["intel_paa"] else "⚠️ partiel"
                         _cost  = 0.0
 
                     elif s in (2, 3, 4, 5):
