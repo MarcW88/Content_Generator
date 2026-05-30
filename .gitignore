@@ -3,6 +3,7 @@
 
 # Cache agent
 style_profile.json
+style_profiles/
 gsc_token.json
 gsc_credentials.json
 

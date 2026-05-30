@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 import anthropic
 
 import config
+from cost_tracker import PassCost, RequestCost
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +32,15 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ArticleOutput:
     keyword: str
-    introduction: str   = ""
-    plan_h2_h3: str     = ""
-    body: str           = ""
-    meta_title: str     = ""
+    site_url: str         = ""
+    introduction: str     = ""
+    plan_h2_h3: str       = ""
+    body: str             = ""
+    meta_title: str       = ""
     meta_description: str = ""
-    full_article: str   = ""
-    pass_logs: list[str] = field(default_factory=list)
+    full_article: str     = ""
+    pass_logs: list[str]  = field(default_factory=list)
+    cost: RequestCost     = field(default_factory=RequestCost)
 
 
 # ── Shared prompt builder ──────────────────────────────────────────────────────
@@ -143,8 +146,8 @@ Retourne en JSON strictement valide :
 
 # ── Claude caller ──────────────────────────────────────────────────────────────
 
-def _call_claude(system: str, user_prompt: str) -> str:
-    """Single Claude Sonnet call. Returns text content."""
+def _call_claude(system: str, user_prompt: str) -> tuple[str, int, int]:
+    """Single Claude Sonnet call. Returns (text, input_tokens, output_tokens)."""
     client  = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     message = client.messages.create(
         model      = config.CLAUDE_SONNET,
@@ -152,7 +155,11 @@ def _call_claude(system: str, user_prompt: str) -> str:
         system     = system,
         messages   = [{"role": "user", "content": user_prompt}],
     )
-    return message.content[0].text.strip()
+    return (
+        message.content[0].text.strip(),
+        message.usage.input_tokens,
+        message.usage.output_tokens,
+    )
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -172,13 +179,15 @@ def run_writing_pipeline(
     # ── Pass 1 : Introduction ─────────────────────────────────────────────────
     logger.info("[Writer] Passe 1 — Introduction")
     p1_prompt = PASS1_PROMPT.format(keyword=keyword)
-    output.introduction = _call_claude(system, p1_prompt)
+    output.introduction, in1, out1 = _call_claude(system, p1_prompt)
+    output.cost.passes.append(PassCost(config.CLAUDE_SONNET, in1, out1))
     output.pass_logs.append(f"PASS1 OK — {len(output.introduction.split())} mots")
 
     # ── Pass 2 : Plan H2/H3 ──────────────────────────────────────────────────
     logger.info("[Writer] Passe 2 — Plan H2/H3")
     p2_prompt = PASS2_PROMPT.format(pass1_output=output.introduction)
-    output.plan_h2_h3 = _call_claude(system, p2_prompt)
+    output.plan_h2_h3, in2, out2 = _call_claude(system, p2_prompt)
+    output.cost.passes.append(PassCost(config.CLAUDE_SONNET, in2, out2))
     output.pass_logs.append(f"PASS2 OK — {output.plan_h2_h3.count('##')} sections")
 
     # ── Pass 3 : Corps ────────────────────────────────────────────────────────
@@ -188,14 +197,16 @@ def run_writing_pipeline(
         pass2_output     = output.plan_h2_h3,
         target_word_count= config.TARGET_WORD_COUNT,
     )
-    output.body = _call_claude(system, p3_prompt)
+    output.body, in3, out3 = _call_claude(system, p3_prompt)
+    output.cost.passes.append(PassCost(config.CLAUDE_SONNET, in3, out3))
     output.pass_logs.append(f"PASS3 OK — {len(output.body.split())} mots")
 
     # ── Pass 4 : Méta + Révision ──────────────────────────────────────────────
     logger.info("[Writer] Passe 4 — Méta + révision finale")
     full_draft = f"{output.introduction}\n\n{output.body}"
     p4_prompt  = PASS4_PROMPT.format(full_draft=full_draft)
-    raw_p4     = _call_claude(system, p4_prompt)
+    raw_p4, in4, out4 = _call_claude(system, p4_prompt)
+    output.cost.passes.append(PassCost(config.CLAUDE_SONNET, in4, out4))
 
     # Parse JSON response from pass 4
     import json

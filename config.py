@@ -1,6 +1,6 @@
 """
 Central configuration for the content agent.
-All tunable parameters live here — never hardcode in modules.
+Dual-source: Streamlit secrets (cloud) → .env (local) → default.
 """
 
 import os
@@ -8,40 +8,53 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _get(key: str, default: str = "") -> str:
+    """Read from Streamlit secrets first, fall back to env var."""
+    try:
+        import streamlit as st
+        val = st.secrets.get(key, "")
+        if val:
+            return str(val)
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
+
 # ── API Keys ──────────────────────────────────────────────────────────────────
-ANTHROPIC_API_KEY   = os.getenv("ANTHROPIC_API_KEY", "")
-FIRECRAWL_API_KEY   = os.getenv("FIRECRAWL_API_KEY", "")
-DATAFORSEO_LOGIN    = os.getenv("DATAFORSEO_LOGIN", "")
-DATAFORSEO_PASSWORD = os.getenv("DATAFORSEO_PASSWORD", "")
-GSC_CREDENTIALS_FILE = os.getenv("GSC_CREDENTIALS_FILE", "gsc_credentials.json")
-GSC_SITE_URL        = os.getenv("GSC_SITE_URL", "")   # e.g. "https://www.dedecker.be/"
+ANTHROPIC_API_KEY    = _get("ANTHROPIC_API_KEY")
+FIRECRAWL_API_KEY    = _get("FIRECRAWL_API_KEY")
+DATAFORSEO_LOGIN     = _get("DATAFORSEO_LOGIN")
+DATAFORSEO_PASSWORD  = _get("DATAFORSEO_PASSWORD")
+GSC_CREDENTIALS_FILE = _get("GSC_CREDENTIALS_FILE", "gsc_credentials.json")
+GSC_SITE_URL         = _get("GSC_SITE_URL")
 
-# ── Target site ───────────────────────────────────────────────────────────────
-TARGET_SITE_URL     = os.getenv("TARGET_SITE_URL", "https://www.dedecker.be")
-STYLE_PROFILE_CACHE = os.getenv("STYLE_PROFILE_CACHE", "style_profile.json")
+# ── Style profile cache ────────────────────────────────────────────────────────
+# One cache file per site — keyed by slugified URL at runtime (see tone_analyzer)
+STYLE_PROFILE_CACHE_DIR = "style_profiles"
 
-# ── Claude models ─────────────────────────────────────────────────────────────
-CLAUDE_SONNET = "claude-sonnet-4-5"   # passes 1-4 : rédaction
-CLAUDE_OPUS   = "claude-opus-4-5"     # tone analyzer : analyse nuancée
+# ── Claude models ──────────────────────────────────────────────────────────────
+CLAUDE_SONNET = "claude-sonnet-4-5"
+CLAUDE_OPUS   = "claude-opus-4-5"
 
-# ── Scraping ──────────────────────────────────────────────────────────────────
-SCRAPE_PAGES_COUNT  = 8       # nb de pages à scraper pour le style profile
-SCRAPE_MAX_CHARS    = 6_000   # chars max par page envoyés à Claude
+# ── Scraping ───────────────────────────────────────────────────────────────────
+SCRAPE_PAGES_COUNT = 8
+SCRAPE_MAX_CHARS   = 6_000
 
-# ── SEO ───────────────────────────────────────────────────────────────────────
+# ── SEO ────────────────────────────────────────────────────────────────────────
 DATAFORSEO_LANGUAGE = "fr"
-DATAFORSEO_LOCATION = 2056    # Belgique
+DATAFORSEO_LOCATION = 2056
 SERP_RESULTS_COUNT  = 10
-PAA_MAX             = 10      # "People Also Ask" max items
+PAA_MAX             = 10
 
-# ── Writing passes ────────────────────────────────────────────────────────────
-TARGET_WORD_COUNT   = 1500    # objectif mots pour l'article complet
+# ── Writing passes ─────────────────────────────────────────────────────────────
+TARGET_WORD_COUNT   = 1500
 MAX_TOKENS_PER_PASS = 3000
 
-# ── Webhook server ────────────────────────────────────────────────────────────
-WEBHOOK_HOST = "0.0.0.0"
-WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", 8080))
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")   # optionnel — vérifie le header X-Secret
+# ── Webhook ────────────────────────────────────────────────────────────────────
+WEBHOOK_HOST   = "0.0.0.0"
+WEBHOOK_PORT   = int(_get("WEBHOOK_PORT", "8080"))
+WEBHOOK_SECRET = _get("WEBHOOK_SECRET")
 
-# ── Output ────────────────────────────────────────────────────────────────────
-OUTPUT_DIR = os.getenv("OUTPUT_DIR", "outputs")
+# ── Output ─────────────────────────────────────────────────────────────────────
+OUTPUT_DIR = _get("OUTPUT_DIR", "outputs")

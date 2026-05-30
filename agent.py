@@ -93,7 +93,7 @@ def _save_outputs(keyword: str, article, intel, style_profile: dict) -> dict[str
 
 # ── Main orchestrator ─────────────────────────────────────────────────────────
 
-def run(keyword: str, refresh_style: bool = False) -> dict:
+def run(keyword: str, site_url: str = "", refresh_style: bool = False) -> dict:
     """
     Full pipeline. Returns the JSON bundle dict.
     Can be called programmatically (from webhook.py or tests).
@@ -102,10 +102,14 @@ def run(keyword: str, refresh_style: bool = False) -> dict:
     logger.info("Starting content agent for keyword: %s", keyword)
     logger.info("═" * 60)
 
+    target = site_url or config._get("TARGET_SITE_URL", "")
+    if not target:
+        raise ValueError("site_url is required")
+
     # Step 1 — Style Profile
-    logger.info("Step 1/3 — Building style profile …")
-    style_profile   = build_style_profile(force_refresh=refresh_style)
-    style_context   = style_profile_to_system_context(style_profile)
+    logger.info("Step 1/3 — Building style profile for %s …", target)
+    style_profile, _, _ = build_style_profile(target, force_refresh=refresh_style)
+    style_context       = style_profile_to_system_context(style_profile)
     logger.info("Style profile ready: %d keys", len(style_profile))
 
     # Step 2 — SEO Intelligence
@@ -147,6 +151,11 @@ def main():
         help='Mot-clé principal, ex: "rénovation cuisine Bruxelles"',
     )
     parser.add_argument(
+        "--site-url",
+        default="",
+        help="URL du site cible (override TARGET_SITE_URL dans .env)",
+    )
+    parser.add_argument(
         "--refresh-style",
         action="store_true",
         default=False,
@@ -165,7 +174,7 @@ def main():
         logger.error("Copy .env.example to .env and fill in the values.")
         sys.exit(1)
 
-    result = run(args.keyword, refresh_style=args.refresh_style)
+    result = run(args.keyword, site_url=config._get("TARGET_SITE_URL",""), refresh_style=args.refresh_style)
     print(f"\nArticle généré avec succès ({result['word_count']} mots)")
     print(f"Meta title : {result['meta_title']}")
     print(f"Fichiers   : outputs/{_slugify(args.keyword)}_*.md / .json")

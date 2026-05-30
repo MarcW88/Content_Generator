@@ -36,6 +36,14 @@ import config
 logger = logging.getLogger(__name__)
 
 
+def _cache_path(site_url: str) -> str:
+    """One cache file per site URL."""
+    import re
+    slug = re.sub(r"[^a-z0-9]+", "-", site_url.lower().rstrip("/").replace("https://", "").replace("http://", ""))
+    os.makedirs(config.STYLE_PROFILE_CACHE_DIR, exist_ok=True)
+    return os.path.join(config.STYLE_PROFILE_CACHE_DIR, f"{slug}.json")
+
+
 # ── Scrapers ──────────────────────────────────────────────────────────────────
 
 def _scrape_with_firecrawl(url: str) -> str:
@@ -155,7 +163,7 @@ Schema attendu (respecte exactement ces clés) :
 }"""
 
 
-def extract_style_profile(corpus: str) -> dict:
+def extract_style_profile(corpus: str) -> tuple[dict, int, int]:
     """Send corpus to Claude Opus and return structured Style Profile dict."""
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
@@ -174,30 +182,34 @@ def extract_style_profile(corpus: str) -> dict:
         ],
     )
     raw = message.content[0].text.strip()
-    # strip accidental markdown fences
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
-    return json.loads(raw)
+    in_tok  = message.usage.input_tokens
+    out_tok = message.usage.output_tokens
+    return json.loads(raw), in_tok, out_tok
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def build_style_profile(force_refresh: bool = False) -> dict:
+def build_style_profile(
+    site_url: str,
+    force_refresh: bool = False,
+) -> tuple[dict, int, int]:
     """
-    Return the Style Profile for TARGET_SITE_URL.
-    Uses cached file if it exists and force_refresh is False.
+    Return (style_profile_dict, input_tokens, output_tokens) for the given site URL.
+    Uses a per-site cache file — tokens are 0 when loaded from cache.
     """
-    cache_path = config.STYLE_PROFILE_CACHE
+    cache = _cache_path(site_url)
 
-    if not force_refresh and os.path.exists(cache_path):
-        logger.info("Loading cached style profile from %s", cache_path)
-        with open(cache_path) as f:
-            return json.load(f)
+    if not force_refresh and os.path.exists(cache):
+        logger.info("Loading cached style profile from %s", cache)
+        with open(cache) as f:
+            return json.load(f), 0, 0
 
-    logger.info("Building style profile for %s …", config.TARGET_SITE_URL)
-    urls = _discover_page_urls(config.TARGET_SITE_URL, config.SCRAPE_PAGES_COUNT)
+    logger.info("Building style profile for %s …", site_url)
+    urls = _discover_page_urls(site_url, config.SCRAPE_PAGES_COUNT)
     logger.info("Discovered %d pages to scrape", len(urls))
 
     pages_text: list[str] = []
@@ -213,14 +225,19 @@ def build_style_profile(force_refresh: bool = False) -> dict:
     if not pages_text:
         raise RuntimeError("No pages could be scraped — check the target URL and API keys.")
 
-    corpus = "\n\n".join(pages_text)[:40_000]   # hard cap before sending to Opus
-    profile = extract_style_profile(corpus)
+    corpus          = "\n\n".join(pages_text)[:40_000]
+    profile, in_t, out_t = extract_style_profile(corpus)
 
-    with open(cache_path, "w") as f:
+    with open(cache, "w") as f:
         json.dump(profile, f, ensure_ascii=False, indent=2)
-    logger.info("Style profile saved to %s", cache_path)
+    logger.info("Style profile saved to %s", cache)
 
-    return profile
+    return profile, in_t, out_t
+
+
+def profile_cache_exists(site_url: str) -> bool:
+    """True if a cached style profile exists for this site."""
+    return os.path.exists(_cache_path(site_url))
 
 
 def style_profile_to_system_context(profile: dict) -> str:
