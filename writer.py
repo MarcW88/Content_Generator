@@ -417,7 +417,10 @@ def generate_chunked_briefing(
         total_in += in2
         total_out += out2
         # Prepare continuation instruction for next call
-        continuation = f"CONTINUE FROM HERE (previous output):\n{part2_chunk}\n\nComplete the section above, do not repeat what was already written."
+        if i == 0:
+            continuation = f"CONTINUE the section ## Structure & Guidelines from where it stopped. DO NOT repeat the section header ## Structure & Guidelines or any subsection headers that were already written. Continue directly with the next bullet point or paragraph."
+        else:
+            continuation = f"CONTINUE the section ## Structure & Guidelines from where it stopped. DO NOT repeat any headers or subsections that were already written. Continue directly with the next bullet point or paragraph."
     part2 = "\n\n".join(part2_parts)
     parts.append(part2)
 
