@@ -494,16 +494,26 @@ elif page == "generate":
 
                 try:
                     if s == 0:
-                        from tone_analyzer import build_style_profile, style_profile_to_system_context
+                        from tone_analyzer import (build_style_profile,
+                                                   style_profile_to_system_context,
+                                                   profile_cache_exists)
+                        cached = profile_cache_exists(pl["site_url"])
+                        if cached and not pl["refresh_style"]:
+                            st.write(f"✅ Style profile en cache pour {pl['site_url']}")
+                        else:
+                            st.write(f"🌐 Scraping de {pl['site_url']} …")
+                            if config.FIRECRAWL_API_KEY:
+                                st.write("🔑 Firecrawl API détectée")
+                            else:
+                                st.write("⚠️ Firecrawl non configuré — fallback BeautifulSoup")
                         profile_data, sp_in, sp_out = build_style_profile(
                             pl["site_url"], force_refresh=pl["refresh_style"])
                         style_ctx = style_profile_to_system_context(profile_data)
                         sp_cost   = PassCost(config.CLAUDE_OPUS, sp_in, sp_out).usd if sp_in else 0
                         pl["style_profile"] = profile_data
                         pl["style_ctx"]     = style_ctx
-                        st.write(f"Site analysé : {pl['site_url']}")
-                        st.write(f"{len(profile_data)} attributs extraits "
-                                 f"{'(cache)' if not sp_in else f'— {sp_in:,} tokens'}")
+                        st.write(f"✅ {len(profile_data)} attributs extraits "
+                                 f"{'(cache)' if not sp_in else f'— {sp_in:,} tokens input'}")
                         detail = "cache" if not sp_in else f"{sp_in:,} tok"
                         _cost  = sp_cost
 

@@ -89,45 +89,56 @@ def scrape_page(url: str) -> str:
 
 def _discover_page_urls(site_url: str, count: int) -> list[str]:
     """
-    Quick sitemap-based discovery. Falls back to crawling the homepage
-    if no sitemap is found.
+    Quick sitemap-based discovery. Falls back to crawling the homepage.
+    Always includes site_url itself as a last resort.
     """
     urls: list[str] = []
+    base = site_url.rstrip("/")
 
+    # 1. Try sitemap
     sitemap_candidates = [
-        site_url.rstrip("/") + "/sitemap.xml",
-        site_url.rstrip("/") + "/sitemap_index.xml",
+        base + "/sitemap.xml",
+        base + "/sitemap_index.xml",
     ]
     for sitemap_url in sitemap_candidates:
         try:
-            resp = requests.get(sitemap_url, timeout=15)
-            if resp.ok:
-                soup = BeautifulSoup(resp.text, "xml")
-                for loc in soup.find_all("loc"):
-                    href = loc.text.strip()
-                    # prefer blog / article pages
-                    if any(k in href for k in ["/blog", "/article", "/guide", "/conseil"]):
-                        urls.append(href)
-                if not urls:
-                    urls = [loc.text.strip() for loc in soup.find_all("loc")]
+            resp = requests.get(sitemap_url, timeout=15,
+                                headers={"User-Agent": "Mozilla/5.0"})
+            if resp.ok and "<loc>" in resp.text:
+                # Use html.parser as xml fallback in case lxml-xml is unavailable
+                try:
+                    soup = BeautifulSoup(resp.text, "lxml-xml")
+                except Exception:
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                locs = [t.text.strip() for t in soup.find_all("loc")]
+                preferred = [u for u in locs
+                             if any(k in u for k in ["/blog", "/article", "/guide", "/conseil", "/actualite"])]
+                urls = preferred if preferred else locs
+                logger.info("Sitemap OK — %d URLs found", len(urls))
                 break
-        except Exception:
-            continue
+        except Exception as exc:
+            logger.warning("Sitemap %s failed: %s", sitemap_url, exc)
 
+    # 2. Fallback: parse homepage links
     if not urls:
-        # fallback: parse homepage links
         try:
-            resp  = requests.get(site_url, timeout=15)
-            soup  = BeautifulSoup(resp.text, "html.parser")
-            base  = site_url.rstrip("/")
+            resp = requests.get(site_url, timeout=15,
+                                headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
             for a in soup.find_all("a", href=True):
                 href = a["href"]
                 if href.startswith("/") and len(href) > 1:
                     urls.append(base + href)
                 elif href.startswith(base) and href != base:
                     urls.append(href)
+            logger.info("Homepage crawl — %d links found", len(urls))
         except Exception as exc:
             logger.warning("Homepage crawl failed: %s", exc)
+
+    # 3. Always include the base URL itself as a last resort
+    if site_url not in urls:
+        urls.insert(0, site_url)
 
     # deduplicate + limit
     seen, result = set(), []
@@ -213,17 +224,28 @@ def build_style_profile(
     logger.info("Discovered %d pages to scrape", len(urls))
 
     pages_text: list[str] = []
+    errors: list[str] = []
     for url in urls:
         try:
             text = scrape_page(url)
             if text.strip():
                 pages_text.append(f"=== {url} ===\n{text}")
+                logger.info("Scraped %s (%d chars)", url, len(text))
+            else:
+                logger.warning("Empty content at %s", url)
             time.sleep(0.5)
         except Exception as exc:
-            logger.warning("Skipping %s: %s", url, exc)
+            msg = f"{url}: {exc}"
+            logger.warning("Skipping %s", msg)
+            errors.append(msg)
 
     if not pages_text:
-        raise RuntimeError("No pages could be scraped — check the target URL and API keys.")
+        detail = "\n".join(errors[:5]) if errors else "Aucune URL trouvée."
+        raise RuntimeError(
+            f"Aucune page n'a pu être scrappée pour '{site_url}'.\n"
+            f"Vérifie que l'URL est correcte et accessible.\n"
+            f"Détails ({len(errors)} erreur(s)) :\n{detail}"
+        )
 
     corpus          = "\n\n".join(pages_text)[:40_000]
     profile, in_t, out_t = extract_style_profile(corpus)
