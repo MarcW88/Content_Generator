@@ -405,6 +405,10 @@ scrupuleusement le briefing.
 Section à rédiger :
 {section_spec}
 
+IMPORTANT : Suis TOUTES les consignes du briefing (tonalité, style, positionnement)
+mais ton OUTPUT ne doit contenir QUE le contenu de l'article basé sur le plan de rédaction.
+N'inclus PAS les sections du briefing (CTA, angle différenciant, etc.) dans ta réponse.
+
 Principe GEO / AEO obligatoire :
 Cette section doit répondre de manière explicite et complète à une
 intention de recherche précise. Commence par une phrase-réponse directe
@@ -416,6 +420,7 @@ Règles absolues :
 - Phrases naturelles et fluides, sans sur-optimisation du mot-clé
 - Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
 - Ne rédige PAS les autres sections de la page
+- OUTPUT : uniquement le contenu de l'article, pas de sections du briefing
 
 Retourne UNIQUEMENT le contenu de cette section en markdown.
 """
