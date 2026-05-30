@@ -379,9 +379,10 @@ mais ton OUTPUT ne doit contenir QUE le contenu de l'article basé sur le plan d
 N'inclus PAS les sections du briefing (CTA, angle différenciant, etc.) dans ta réponse.
 
 RESPECTE LA LONGUEUR CIBLE spécifiée dans le briefing (généralement 1200-1800 mots pour l'article complet).
-Pour cette section, vise environ 200-300 mots maximum.
+Pour cette section, vise STRICTEMENT 200-300 mots maximum. Ne dépasse PAS cette limite.
 Ne répète PAS les informations déjà couvertes dans les sections précédentes.
 Sois concis et va droit au but sans développements superflus.
+Chaque phrase doit apporter de l'information utile, pas de remplissage.
 
 Principe GEO / AEO obligatoire :
 Cette section doit répondre de manière explicite et complète à une
@@ -607,7 +608,7 @@ def generate_article_by_sections(
         if continuation:
             prompt = f"{continuation}\n\n{prompt}"
 
-        section, in_t, out_t = _call_claude(system, prompt, max_tokens=2500)
+        section, in_t, out_t = _call_claude(system, prompt, max_tokens=4000)
 
         # Post-process: remove duplicate headers
         if idx > 1:
