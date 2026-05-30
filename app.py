@@ -691,16 +691,17 @@ elif page == "generate":
                             detail = f"{wc} mots"
 
                         elif s == 3:  # Article complet
+                            from writer import generate_article_by_sections
                             user_feedback = pl.get("user_feedback", "")
                             feedback_block = f"\n\n--- FEEDBACK UTILISATEUR ---\n{user_feedback}\n--- FIN FEEDBACK ---" if user_feedback else ""
-                            prompt = ARTICLE_PROMPT.format(
-                                keyword = pl["keyword"],
-                                briefing= pl["briefing"],
-                            ) + feedback_block
-                            text, in_t, out_t = _call_claude(system, prompt, max_tokens=6000)
+                            briefing_with_feedback = pl["briefing"] + feedback_block
+                            text, in_t, out_t = generate_article_by_sections(
+                                briefing=briefing_with_feedback,
+                                system=system,
+                            )
                             pl["full_article"] = text
                             wc = _count_words(text)
-                            st.write(f"Article — {wc} mots")
+                            st.write(f"Article — {wc} mots (chunked)")
                             detail = f"{wc} mots"
 
                         elif s == 4:  # Métas + révision

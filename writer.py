@@ -393,16 +393,32 @@ def generate_chunked_briefing(
     return full_briefing, total_in, total_out
 
 
+def extract_h2_sections(briefing: str) -> list[str]:
+    """Extract H2 section titles from briefing markdown."""
+    import re
+    h2_pattern = re.compile(r'^##\s+(.+)$', re.MULTILINE)
+    matches = h2_pattern.findall(briefing)
+    return [m.strip() for m in matches if m.strip()]
+
+
 def generate_article_by_sections(
     briefing: str,
     system: str,
-    h2_sections: list[str],
+    h2_sections: list[str] | None = None,
 ) -> tuple[str, int, int]:
     """
     Generate article section by section to avoid token limits.
-    h2_sections: list of H2 titles to generate
+    If h2_sections is None, extract them from briefing.
     Returns (full_article, total_input_tokens, total_output_tokens).
     """
+    if h2_sections is None:
+        h2_sections = extract_h2_sections(briefing)
+        logger.info("[ChunkedArticle] Extracted %d H2 sections from briefing", len(h2_sections))
+
+    if not h2_sections:
+        logger.warning("[ChunkedArticle] No H2 sections found, falling back to single call")
+        return _call_claude(system, ARTICLE_PROMPT.format(briefing=briefing, keyword=""), max_tokens=6000)
+
     sections = []
     total_in, total_out = 0, 0
 
