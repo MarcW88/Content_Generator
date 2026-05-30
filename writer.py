@@ -439,13 +439,41 @@ def generate_chunked_briefing(
     # Summary for next call
     summary2a = _build_context_summary(part1 + "\n\n" + part2a, max_words=120)
 
-    # Part 2b: Plan de Rédaction
-    logger.info("[ChunkedBriefing] Part 2b — Plan de Rédaction")
-    p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
-    part2b, in2b, out2b = _call_claude(system, p2b, max_tokens=2000)
+    # Part 2b: Plan de Rédaction (3 mandatory calls, 6000 tokens total)
+    part2b_parts = []
+    seen_headers = set()
+    continuation = ""
+    for i in range(3):
+        logger.info("[ChunkedBriefing] Part 2b.%d — Plan de Rédaction", i + 1)
+        p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
+        if continuation:
+            p2b = f"{continuation}\n\n{p2b}"
+        part2b_chunk, in2b, out2b = _call_claude(system, p2b, max_tokens=2000)
+        # Post-process: remove duplicate headers
+        if i > 0:
+            import re
+            lines = part2b_chunk.split('\n')
+            filtered_lines = []
+            for line in lines:
+                header_match = re.match(r'^(#{2,3})\s+(.+)$', line)
+                if header_match:
+                    header_text = header_match.group(2).strip().lower()
+                    if header_text in seen_headers:
+                        continue
+                    seen_headers.add(header_text)
+                filtered_lines.append(line)
+            part2b_chunk = '\n'.join(filtered_lines)
+        else:
+            import re
+            for match in re.finditer(r'^(#{2,3})\s+(.+)$', part2b_chunk, re.MULTILINE):
+                seen_headers.add(match.group(2).strip().lower())
+        part2b_parts.append(part2b_chunk)
+        total_in += in2b
+        total_out += out2b
+        # Prepare continuation instruction
+        continuation = f"CONTINUE the Plan de Rédaction from where it stopped. DO NOT repeat headers already written. Continue directly with the next H2/H3 section."
+    part2b = "\n\n".join(part2b_parts)
     parts.append(part2b)
-    total_in += in2b
-    total_out += out2b
 
     # Summary for next call
     summary2b = _build_context_summary(part1 + "\n\n" + part2a + "\n\n" + part2b, max_words=150)
