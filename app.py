@@ -806,6 +806,50 @@ elif page == "settings":
     st.markdown(chips, unsafe_allow_html=True)
     st.caption("Pour modifier les clés : Streamlit Cloud → App settings → Secrets (en prod) ou fichier `.env` (en local)")
 
+    # ── Test live des APIs ─────────────────────────────────────────────────────
+    st.markdown('<div class="section-hdr">Test des connexions API</div>', unsafe_allow_html=True)
+    tc1, tc2 = st.columns(2)
+
+    if tc1.button("🧪 Tester DataForSEO", use_container_width=True):
+        import base64, requests as _req
+        login = config.DATAFORSEO_LOGIN.strip()
+        pwd   = config.DATAFORSEO_PASSWORD.strip()
+        if not login or not pwd:
+            st.error("❌ DATAFORSEO_LOGIN ou DATAFORSEO_PASSWORD manquant dans les secrets.")
+        else:
+            encoded = base64.b64encode(f"{login}:{pwd}".encode()).decode()
+            st.code(f"Login    : {login}\n"
+                    f"Password : {pwd[:4]}{'*' * (len(pwd)-4)}\n"
+                    f"Base64   : {encoded[:30]}…")
+            try:
+                r = _req.post(
+                    "https://api.dataforseo.com/v3/serp/google/organic/live/advanced",
+                    headers={"Authorization": f"Basic {encoded}",
+                             "Content-Type": "application/json"},
+                    json=[{"keyword": "test", "language_code": "fr",
+                           "location_code": 2056, "device": "desktop", "depth": 1}],
+                    timeout=15,
+                )
+                if r.status_code == 200:
+                    st.success(f"✅ DataForSEO OK — {r.status_code}")
+                else:
+                    st.error(f"❌ {r.status_code} — {r.text[:300]}")
+            except Exception as e:
+                st.error(f"❌ Erreur réseau : {e}")
+
+    if tc2.button("🧪 Tester Anthropic", use_container_width=True):
+        try:
+            import anthropic as _ant
+            c = _ant.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+            msg = c.messages.create(
+                model=config.CLAUDE_SONNET,
+                max_tokens=5,
+                messages=[{"role": "user", "content": "hi"}],
+            )
+            st.success(f"✅ Anthropic OK — {msg.usage.input_tokens} tokens")
+        except Exception as e:
+            st.error(f"❌ Anthropic : {e}")
+
     # ── Modèles ───────────────────────────────────────────────────────────────
     st.markdown('<div class="section-hdr">Modèles & paramètres</div>', unsafe_allow_html=True)
     mc1, mc2, mc3 = st.columns(3)
