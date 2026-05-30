@@ -373,11 +373,14 @@ elif page == "generate":
                 "intel_lsi":       [],
                 "intel_longtail":  [],
                 "intel_cannib":    [],
-                "briefing":      None,
-                "full_article":  None,
-                "meta_title":    "",
+                "intel_intent":    "",
+                "intel_serp_titles": [],
+                "briefing":         None,
+                "full_article":     None,
+                "meta_title":       "",
                 "meta_description": "",
-                "system_prompt": None,
+                "geo_check":        [],
+                "system_prompt":    None,
                 # stepper display
                 "states":        ["pending"] * 5,
                 "details":       [""] * 5,
@@ -439,16 +442,23 @@ elif page == "generate":
                 with st.expander("Voir le style profile complet"):
                     st.json({k: v for k, v in p.items() if not k.startswith("_")})
             elif step_done == 1:
-                cl = st.session_state.pl.get("intel_cluster", {})
-                sec   = pl.get("intel_secondary", [])
-                lsi   = pl.get("intel_lsi", [])
-                lt    = pl.get("intel_longtail", [])
+                intent = pl.get("intel_intent", "")
+                if intent:
+                    st.info(f"🔎 Intention de recherche : **{intent}**")
+                sec = pl.get("intel_secondary", [])
+                lsi = pl.get("intel_lsi", [])
+                lt  = pl.get("intel_longtail", [])
                 if sec:
                     st.markdown(f"**Mots-clés secondaires ({len(sec)}) :** " + ", ".join(sec[:10]))
                 if lsi:
                     st.markdown(f"**LSI / sémantique ({len(lsi)}) :** " + ", ".join(lsi[:12]))
                 if lt:
                     st.markdown(f"**Longue traîne ({len(lt)}) :** " + ", ".join(lt[:8]))
+                serp_titles = pl.get("intel_serp_titles", [])
+                if serp_titles:
+                    with st.expander(f"Sources SERP locales ({len(serp_titles)} pages)"):
+                        for i, (title, url) in enumerate(serp_titles, 1):
+                            st.markdown(f"**{i}.** {title}  \n`{url}`")
                 if pl["intel_paa"]:
                     st.markdown(f"**Questions PAA ({len(pl['intel_paa'])}) :**")
                     for q in pl["intel_paa"][:6]:
@@ -468,6 +478,12 @@ elif page == "generate":
             elif step_done == 4:
                 st.markdown(f"**🏷️ Meta title :** {pl['meta_title']}")
                 st.markdown(f"**📝 Meta description :** {pl['meta_description']}")
+                geo = pl.get("geo_check", [])
+                if geo:
+                    with st.expander(f"Vérification GEO ({len(geo)} sections)", expanded=False):
+                        for item in geo:
+                            icon = "✅" if "oui" in item.lower() else "⚠️"
+                            st.caption(f"{icon} {item}")
                 with st.expander("Article révisé complet", expanded=False):
                     st.markdown(pl["full_article"] or "")
 
@@ -562,12 +578,16 @@ elif page == "generate":
                         if intel.cannibalisation_risk:
                             st.warning(f"⚠️ {len(intel.cannibalisation_risk)} risques cannibalisation")
 
-                        pl["intel_paa"]       = intel.paa_questions
-                        pl["intel_secondary"] = intel.keyword_cluster.secondary
-                        pl["intel_lsi"]       = intel.keyword_cluster.lsi
-                        pl["intel_longtail"]  = intel.keyword_cluster.long_tail
-                        pl["intel_cannib"]    = [p.url for p in intel.cannibalisation_risk]
-                        pl["seo_brief"]       = seo_brief
+                        pl["intel_paa"]          = intel.paa_questions
+                        pl["intel_secondary"]     = intel.keyword_cluster.secondary
+                        pl["intel_lsi"]           = intel.keyword_cluster.lsi
+                        pl["intel_longtail"]      = intel.keyword_cluster.long_tail
+                        pl["intel_cannib"]        = [p.url for p in intel.cannibalisation_risk]
+                        pl["intel_intent"]        = intel.search_intent
+                        pl["intel_serp_titles"]   = [(r.title, r.url) for r in intel.serp_top10[:8]]
+                        pl["seo_brief"]           = seo_brief
+                        if intel.search_intent:
+                            st.info(f"🔎 Intention de recherche : **{intel.search_intent}**")
                         total_kw = len(cl.secondary) + len(cl.lsi) + len(cl.long_tail)
                         detail = f"{total_kw} KW · {len(pl['intel_paa'])} PAA" if total_kw else "⚠️ partiel"
                         _cost  = 0.0
@@ -611,16 +631,24 @@ elif page == "generate":
                                 full_article=pl["full_article"] or ""
                             )
                             text, in_t, out_t = _call_claude(system, prompt, max_tokens=4000)
-                            clean = text.strip().lstrip("```json").lstrip("```").rstrip("```")
+                            clean = text.strip()
+                            if clean.startswith("```"):
+                                clean = clean.split("```")[1]
+                                if clean.startswith("json"):
+                                    clean = clean[4:]
                             try:
                                 p4 = _json.loads(clean)
                                 pl["meta_title"]       = p4.get("meta_title", "")
                                 pl["meta_description"] = p4.get("meta_description", "")
                                 revised = p4.get("revised_article", pl["full_article"])
                                 pl["full_article"] = f"{revised}\n\n{p4.get('cta_final','')}".strip()
+                                pl["geo_check"]    = p4.get("geo_check", [])
                             except Exception:
                                 pass  # keep existing full_article
                             st.write(f"Meta title : {pl['meta_title']}")
+                            if pl.get("geo_check"):
+                                ok = sum(1 for g in pl["geo_check"] if "oui" in g.lower())
+                                st.write(f"GEO : {ok}/{len(pl['geo_check'])} sections conformes")
                             detail = f"{len(pl['meta_title'])} car."
 
                         _cost = PassCost(config.CLAUDE_SONNET, in_t, out_t).usd

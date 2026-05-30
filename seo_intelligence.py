@@ -68,7 +68,42 @@ class SEOIntelligence:
     gsc_opportunities: list[GSCPage]    = field(default_factory=list)
     recommended_h2: list[str]           = field(default_factory=list)
     meta_title_examples: list[str]      = field(default_factory=list)
+    search_intent: str                  = ""   # Informationnel / Commercial / Transactionnel / Mix
     errors: list[str]                   = field(default_factory=list)
+
+
+# ── Search intent heuristic ───────────────────────────────────────────────
+
+_INTENT_SIGNALS: dict[str, list[str]] = {
+    "Informationnel": [
+        "comment", "pourquoi", "qu'est", "guide", "tutoriel", "définition", "comprendre",
+        "how", "what", "why", "guide", "tutorial", "definition", "learn", "tips",
+        "hoe", "wat", "waarom", "gids",
+    ],
+    "Commercial": [
+        "meilleur", "comparatif", "avis", "top", "classement", "choisir", "alternative",
+        "best", "review", "vs", "comparison", "recommend",
+        "beste", "vergelijking", "beoordeling",
+    ],
+    "Transactionnel": [
+        "acheter", "prix", "achat", "commander", "tarif", "offre", "promo", "pas cher",
+        "buy", "price", "order", "cheap", "discount", "shop",
+        "kopen", "prijs", "bestellen", "goedkoop",
+    ],
+}
+
+
+def infer_search_intent(keyword: str, titles: list[str]) -> str:
+    """Classify search intent from keyword + SERP titles using signal counts."""
+    corpus = " ".join([keyword] + titles).lower()
+    scores = {intent: sum(1 for w in words if w in corpus)
+              for intent, words in _INTENT_SIGNALS.items()}
+    top    = max(scores, key=scores.get)
+    second = sorted(scores, key=scores.get, reverse=True)[1]
+    # Mixed if two intents are equally strong
+    if scores[top] > 0 and scores[second] >= scores[top] - 1:
+        return f"Mix {top} / {second}"
+    return top if scores[top] > 0 else "Informationnel"  # default
 
 
 # ── DataForSEO helpers ────────────────────────────────────────────────────────
@@ -382,60 +417,69 @@ def gather_seo_intelligence(keyword: str) -> SEOIntelligence:
         intel.paa_questions, intel.keyword_cluster, intel.serp_top10
     )
 
+    intel.search_intent = infer_search_intent(
+        keyword, [r.title for r in intel.serp_top10]
+    )
+    logger.info("[SEO] Intent détecté : %s", intel.search_intent)
+
     return intel
 
 
 def seo_intel_to_brief(intel: SEOIntelligence) -> str:
     """
-    Serialises SEOIntelligence to a compact brief string for injection
-    into the writer's system prompt.
+    Serialises SEOIntelligence to a rich brief for the writer.
+    Includes SERP sources (country-local), intent, semantic clusters and PAA.
     """
     cl = intel.keyword_cluster
     lines = [
         f"## SEO Brief — mot-clé cible : {intel.keyword}",
+        f"Intention de recherche détectée : **{intel.search_intent or 'Informationnel'}**",
         "",
-        "### Mots-clés secondaires (volume ≥ 500 — à intégrer naturellement)",
+    ]
+
+    # ─ Sources SERP locales (vraies pages qui rankent) ────────────────────────────
+    if intel.serp_top10:
+        lines.append("### Sources SERP locales — pages qui rankent sur ce marché")
+        lines.append("(Utilise ces URLs comme références principales dans le briefing)")
+        for i, r in enumerate(intel.serp_top10[:8], 1):
+            lines.append(f"{i}. {r.title}")
+            lines.append(f"   URL : {r.url}")
+            if r.description:
+                lines.append(f"   Extrait : {r.description[:120]}…")
+        lines.append("")
+
+    # ─ Champ sémantique ─────────────────────────────────────────────────────────
+    lines += [
+        "### Mots-clés secondaires (volume ≥ 500)",
         ", ".join(cl.secondary[:12]) or "—",
         "",
-        "### Mots-clés LSI / sémantique élargie (volume 50-500)",
+        "### LSI / sémantique élargie (volume 50-500)",
         ", ".join(cl.lsi[:15]) or "—",
         "",
-        "### Longue traîne & questions associées",
+        "### Longue traîne",
         ", ".join(cl.long_tail[:10]) or "—",
         "",
-        "### Questions PAA (à traiter dans l'article — contexte, pas seule base)",
+        "### Questions PAA (intention de recherche locale)",
     ]
     for q in intel.paa_questions[:8]:
         lines.append(f"- {q}")
 
-    lines += [
-        "",
-        "### H2 recommandés",
-    ]
-    for h in intel.recommended_h2:
-        lines.append(f"- {h}")
+    if intel.recommended_h2:
+        lines += ["", "### H2 suggérés"]
+        for h in intel.recommended_h2:
+            lines.append(f"- {h}")
 
     if intel.cannibalisation_risk:
         lines += [
             "",
-            "### ⚠️ Risque de cannibalisation — NE PAS dupliquer ces pages existantes",
+            "### Risque de cannibalisation — ne pas dupliquer",
         ]
         for p in intel.cannibalisation_risk:
             lines.append(f"- {p.url} (position {p.avg_position}, requête: {p.top_query})")
 
     if intel.gsc_opportunities:
-        lines += [
-            "",
-            "### Opportunités GSC (pages à booster — lier si pertinent)",
-        ]
+        lines += ["", "### Opportunités GSC (lier si pertinent)"]
         for p in intel.gsc_opportunities[:3]:
             lines.append(f"- {p.url} (position {p.avg_position})")
-
-    lines += [
-        "",
-        "### Titres concurrents (inspiration, ne pas copier)",
-    ]
-    for t in intel.meta_title_examples:
-        lines.append(f"- {t}")
 
     return "\n".join(lines)

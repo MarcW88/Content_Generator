@@ -66,29 +66,34 @@ Pays / marché cible : {country}
 
 Ton rôle :
 1. Décris brièvement les activités de {site_url} (2-3 phrases) pour cadrer la demande.
-2. Identifie toi-même 5 articles de référence pertinents sur ce sujet (issus de ta base \
-d'entraînement — indique auteur, titre, publication et année si possible).
-3. En t'appuyant sur ces 5 sources, rédige :
+
+2. Les sources SERP locales ({country}) figurent dans les données SEO ci-dessous
+   (section « Sources SERP locales »). Utilise ces pages comme références principales
+   — elles sont réelles, issues du marché cible, et non générées.
+   Si la liste est vide, identifie toi-même 5 sources pertinentes.
+
+3. En t'appuyant sur ces sources, rédige :
 
    a. Un briefing complet comprenant :
-      - Angle éditorial différenciant pour {site_url}
+      - Intention de recherche détectée et ses implications éditoriales
+      - Angle différenciant pour {site_url} par rapport aux pages qui rankent
       - Points clés incontournables à couvrir
-      - Angle vis-à-vis des concurrents
       - Recommandations de tonalité et de style
       - Longueur cible : 1 200 à 1 800 mots
 
-   b. Un plan de rédaction structuré H2 / H3 avec une description d'une ligne par section
+   b. Un plan de rédaction structuré H2 / H3 où chaque section précise
+      l'intention de recherche spécifique à laquelle elle répond
+      (ex. : « — intention : comprendre le coût »)
 
-Données SEO disponibles (contexte — ne pas en faire la seule base) :
+Données SEO disponibles :
 {seo_brief}
 
 Règles absolues :
 - Pas d'emoji dans le texte
-- Pas de majuscule à chaque mot des titres (seule la première lettre est en majuscule)
+- Pas de majuscule à chaque mot des titres
 - Phrases naturelles et fluides, sans forcer le mot-clé exact
 - Langue : français, néerlandais ou anglais selon la langue dominante du site
-- Liste les 5 sources utilisées à la fin du briefing (usage interne uniquement,
-  elles ne seront pas citées dans l'article)
+- Liste les sources utilisées à la fin du briefing (usage interne uniquement)
 """
 
 
@@ -104,10 +109,16 @@ Voici le briefing validé à suivre EXACTEMENT :
 Ta mission : rédiger l'article complet sur le mot-clé «{keyword}» en respectant
 scrupuleusement ce briefing, le plan H2/H3 inclus.
 
-Avant de commencer, répète les 5 sources de référence mentionnées dans le briefing
+Avant de commencer, répète les sources de référence mentionnées dans le briefing
 (pour confirmer que tu utilises les bonnes), puis rédige l'article.
 
 Tu peux t'inspirer de ces sources mais ne les cite PAS dans l'article final.
+
+Principe GEO / AEO obligatoire :
+Chaque section (H2 ou H3) doit répondre de manière explicite et complète à une
+intention de recherche précise. Commence chaque section par une phrase-réponse directe
+(« la réponse courte d'abord »), puis développe. Cette structure facilite la citation
+par les moteurs de réponse (ChatGPT, Perplexity, Google SGE).
 
 Règles absolues :
 - Pas d'emoji dans le texte
@@ -127,17 +138,20 @@ Tu reçois l'article complet ci-dessous. Effectue la révision finale.
 {full_article}
 
 Tâches :
-1. Méta-title : 50-60 caractères, mot-clé principal en début, accrocheur, pas de majuscule à chaque mot
+1. Méta-title : 50-60 caractères, mot-clé en début, accrocheur, pas de majuscule à chaque mot
 2. Méta-description : 140-160 caractères, bénéfice clair, verbe d'action
-3. Révision légère : corrige les incohérences de ton, supprime les répétitions, renforce les transitions
+3. Révision légère : incohérences de ton, répétitions, transitions
 4. CTA final : 1 CTA de fin d'article aligné avec le style du site
+5. Vérification GEO : pour chaque H2/H3, vérifie qu'il commence par une phrase-réponse
+   directe (« réponse courte d'abord »). Corrige ceux qui ne respectent pas ce principe.
 
 Retourne en JSON strictement valide :
 {{
   "meta_title": "...",
   "meta_description": "...",
   "revised_article": "article complet révisé ici",
-  "cta_final": "..."
+  "cta_final": "...",
+  "geo_check": ["H2 titre — intention couverte : oui/non", ...]
 }}
 """
 
