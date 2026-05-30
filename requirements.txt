@@ -1,0 +1,20 @@
+# Content Agent — Python 3.11+
+
+# LLM
+anthropic>=0.30.0
+
+# HTTP / scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0          # XML sitemap parsing
+
+# Google Search Console
+google-auth>=2.29.0
+google-auth-oauthlib>=1.2.0
+google-api-python-client>=2.120.0
+
+# Environment
+python-dotenv>=1.0.0
+
+# UI
+streamlit>=1.35.0

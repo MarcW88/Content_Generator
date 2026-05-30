@@ -1,0 +1,26 @@
+# Environment — ne jamais committer les clés API
+.env
+
+# Cache agent
+style_profile.json
+gsc_token.json
+gsc_credentials.json
+
+# Outputs générés
+outputs/
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+
+# Streamlit
+.streamlit/
+
+# macOS
+.DS_Store
