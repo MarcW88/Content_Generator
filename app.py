@@ -402,6 +402,71 @@ elif page == "generate":
             unsafe_allow_html=True,
         )
 
+        # ─────────────────────────────────────────────────────────────────────
+        # Helper : UI de validation (appelé depuis 2 endroits)
+        # ─────────────────────────────────────────────────────────────────────
+        def _show_validation():
+            step_done = pl["step"] - 1
+            st.divider()
+            st.markdown(
+                f'<div style="background:#eff3ff;border:2px solid #4f6ef7;border-radius:12px;'
+                f'padding:18px 24px;margin:8px 0 20px">'
+                f'<div style="font-size:14px;font-weight:700;color:#4f6ef7;margin-bottom:4px">'
+                f'⏸ Validation requise — {STEPS[step_done][2]}</div>'
+                f'<div style="font-size:13px;color:#374151">'
+                f'Relis le résultat ci-dessous puis choisis de continuer ou d\'arrêter.</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            # Aperçu selon l'étape terminée
+            if step_done == 0 and pl["style_profile"]:
+                p = pl["style_profile"]
+                c1, c2 = st.columns(2)
+                c1.markdown("**Tonalité :** " + ", ".join(p.get("tonality", [])))
+                c1.markdown("**POV :** " + p.get("pov", "—"))
+                c2.markdown("**Patterns :** " + ", ".join(p.get("recurring_patterns", [])[:4]))
+                c2.markdown("**Vocab. évité :** " + ", ".join(p.get("avoided_vocabulary", [])[:4]))
+                with st.expander("Voir le style profile complet"):
+                    st.json(p)
+            elif step_done == 1:
+                if pl["intel_paa"]:
+                    st.markdown("**Questions PAA extraites :**")
+                    for q in pl["intel_paa"][:6]:
+                        st.caption(f"• {q}")
+                if pl["intel_cannib"]:
+                    st.warning(f"⚠️ {len(pl['intel_cannib'])} risque(s) cannibalisation")
+            elif step_done == 2 and pl["introduction"]:
+                with st.expander("Lire l'introduction", expanded=True):
+                    st.markdown(pl["introduction"])
+            elif step_done == 3 and pl["plan"]:
+                st.code(pl["plan"], language="markdown")
+            elif step_done == 4 and pl["body"]:
+                st.caption(f"{_count_words(pl['body'])} mots")
+                with st.expander("Lire le corps de l'article", expanded=False):
+                    st.markdown(pl["body"])
+            elif step_done == 5:
+                st.markdown(f"**🏷️ Meta title :** {pl['meta_title']}")
+                st.markdown(f"**📝 Meta description :** {pl['meta_description']}")
+                with st.expander("Article révisé complet", expanded=False):
+                    st.markdown(pl["full_article"] or "")
+
+            # Boutons de décision
+            st.markdown("")
+            next_label = "Enregistrer l'article ✅" if step_done == 5 \
+                         else f"✅ Valider → {STEPS[step_done + 1][2]}"
+            btn_ok, btn_stop = st.columns(2)
+            with btn_ok:
+                if st.button(next_label, type="primary",
+                             use_container_width=True, key=f"val_ok_{step_done}"):
+                    pl["waiting"] = False
+                    st.rerun()
+            with btn_stop:
+                if st.button("⛔ Arrêter", use_container_width=True,
+                             key=f"val_stop_{step_done}"):
+                    pl["stopped"] = True
+                    pl["active"]  = False
+                    st.rerun()
+
         # ── Arrêt demandé ────────────────────────────────────────────────────
         if pl["stopped"]:
             st.warning("⛔ Génération arrêtée à l'étape **" +
@@ -412,65 +477,10 @@ elif page == "generate":
                 st.session_state.pl = None
                 st.rerun()
 
-        # ── En attente de validation ─────────────────────────────────────────
+        # ── En attente de validation (reload page / retour arrière) ──────────
         elif pl["waiting"]:
-            step_done = pl["step"] - 1  # l'étape qui vient de se terminer
-
-            st.markdown(f"### ⏸ Validation requise — {STEPS[step_done][2]}")
-            st.markdown("Relis le résultat ci-dessous, puis choisis de continuer ou d'arrêter.")
-
-            # Aperçu du résultat de l'étape
-            with st.container():
-                if step_done == 0 and pl["style_profile"]:
-                    p = pl["style_profile"]
-                    c1, c2 = st.columns(2)
-                    c1.markdown("**Tonalité :** " + ", ".join(p.get("tonality", [])))
-                    c1.markdown("**POV :** " + p.get("pov", "—"))
-                    c2.markdown("**Patterns :** " + ", ".join(p.get("recurring_patterns", [])[:4]))
-                    c2.markdown("**Vocab. évité :** " + ", ".join(p.get("avoided_vocabulary", [])[:4]))
-                    with st.expander("Voir le style profile complet"):
-                        st.json(p)
-
-                elif step_done == 1:
-                    if pl["intel_paa"]:
-                        st.markdown("**Questions PAA extraites :**")
-                        for q in pl["intel_paa"][:6]:
-                            st.caption(f"• {q}")
-                    if pl["intel_cannib"]:
-                        st.warning(f"⚠️ {len(pl['intel_cannib'])} risque(s) de cannibalisation : "
-                                   + ", ".join(pl["intel_cannib"][:3]))
-
-                elif step_done == 2 and pl["introduction"]:
-                    st.markdown(pl["introduction"])
-
-                elif step_done == 3 and pl["plan"]:
-                    st.code(pl["plan"], language="markdown")
-
-                elif step_done == 4 and pl["body"]:
-                    st.caption(f"{_count_words(pl['body'])} mots")
-                    with st.expander("Lire le corps de l'article", expanded=True):
-                        st.markdown(pl["body"])
-
-                elif step_done == 5:
-                    st.markdown(f"**🏷️ Meta title :** {pl['meta_title']}")
-                    st.markdown(f"**� Meta description :** {pl['meta_description']}")
-                    with st.expander("Article révisé complet", expanded=False):
-                        st.markdown(pl["full_article"])
-
-            st.markdown("---")
-            btn_ok, btn_stop = st.columns([1, 1])
-            next_label = "Enregistrer l'article ✅" if step_done == 5 \
-                         else f"Valider → {STEPS[step_done + 1][2]} ➜"
-            with btn_ok:
-                if st.button(next_label, type="primary", use_container_width=True):
-                    pl["waiting"] = False
-                    # step déjà incrémenté avant le rerun qui a posé waiting=True
-                    st.rerun()
-            with btn_stop:
-                if st.button("⛔ Arrêter la génération", use_container_width=True):
-                    pl["stopped"] = True
-                    pl["active"]  = False
-                    st.rerun()
+            # Cas où la page est rechargée pendant l'attente
+            _show_validation()
 
         # ── EXÉCUTION de l'étape courante ────────────────────────────────────
         elif pl["step"] < 6:
@@ -597,7 +607,7 @@ elif page == "generate":
                         pl["stopped"] = True
                         pl["active"]  = False
 
-            # Mise à jour affichage
+            # Mise à jour stepper final
             stepper_ph.markdown(_stepper_html(pl["states"], pl["details"], pl["step_costs"]),
                                 unsafe_allow_html=True)
             cost_ph.markdown(
@@ -608,8 +618,13 @@ elif page == "generate":
             )
 
             if pl["manual"] and not pl["stopped"] and pl["step"] <= 6:
+                # ⚠️ Ne pas appeler st.rerun() ici — afficher la validation
+                # directement dans le même run pour éviter qu'elle disparaisse.
                 pl["waiting"] = True
-            st.rerun()
+                _show_validation()
+            elif not pl["stopped"]:
+                # Mode automatique : passer directement à l'étape suivante
+                st.rerun()
 
         # ── TOUTES LES ÉTAPES FAITES → Sauvegarde & résultats ────────────────
         elif pl["step"] == 6 and not pl["stopped"]:
