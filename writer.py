@@ -262,6 +262,29 @@ Règles absolues :
 Retourne UNIQUEMENT la section ## Plan de Rédaction complète.
 """
 
+BRIEFING_PART2_PLAN_CONTINUATION = """\
+Voici le résumé du briefing établi précédemment :
+
+{context_summary}
+
+Ton rôle :
+Continue le plan de rédaction structuré à partir de là où il s'est arrêté.
+
+À générer (en markdown) :
+Continue le plan de rédaction structuré H2 / H3 où chaque section précise
+l'intention de recherche spécifique à laquelle elle répond
+(ex. : « — intention : comprendre le coût »)
+NE REPETE PAS le header ## Plan de Rédaction, continue directement avec le contenu.
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres
+- Phrases naturelles et fluides
+- NE JAMAIS répéter les headers déjà écrits
+
+Retourne UNIQUEMENT la continuation du plan de rédaction (sans header ## Plan de Rédaction).
+"""
+
 BRIEFING_PART2_TONALITY = """\
 Voici le résumé du briefing établi précédemment :
 
@@ -442,12 +465,12 @@ def generate_chunked_briefing(
     # Part 2b: Plan de Rédaction (3 mandatory calls, 6000 tokens total)
     part2b_parts = []
     seen_headers = set()
-    continuation = ""
     for i in range(3):
         logger.info("[ChunkedBriefing] Part 2b.%d — Plan de Rédaction", i + 1)
-        p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
-        if continuation:
-            p2b = f"{continuation}\n\n{p2b}"
+        if i == 0:
+            p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
+        else:
+            p2b = BRIEFING_PART2_PLAN_CONTINUATION.format(context_summary=summary2a)
         part2b_chunk, in2b, out2b = _call_claude(system, p2b, max_tokens=2000)
         # Post-process: remove duplicate headers
         if i > 0:
@@ -470,8 +493,6 @@ def generate_chunked_briefing(
         part2b_parts.append(part2b_chunk)
         total_in += in2b
         total_out += out2b
-        # Prepare continuation instruction
-        continuation = f"CONTINUE the Plan de Rédaction from where it stopped. DO NOT repeat headers already written. Continue directly with the next H2/H3 section."
     part2b = "\n\n".join(part2b_parts)
     parts.append(part2b)
 
