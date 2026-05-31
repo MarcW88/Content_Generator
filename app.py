@@ -14,6 +14,12 @@ import streamlit as st
 
 import config
 from cost_tracker import estimate_request_cost, format_usd, PassCost
+from writer import (
+    _build_system, _call_claude,
+    BRIEFING_PROMPT, ARTICLE_PROMPT, META_PROMPT,
+    generate_chunked_briefing, generate_article_by_sections,
+    ArticleOutput, format_final_output
+)
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -662,10 +668,6 @@ elif page == "generate":
                         _cost  = 0.0
 
                     elif s in (2, 3, 4):
-                        from writer import (
-                            _build_system, _call_claude,
-                            BRIEFING_PROMPT, ARTICLE_PROMPT, META_PROMPT,
-                        )
                         if pl["system_prompt"] is None:
                             pl["system_prompt"] = _build_system(
                                 pl["style_ctx"] or "", pl["seo_brief"] or "",
@@ -673,7 +675,6 @@ elif page == "generate":
                         system = pl["system_prompt"]
 
                         if s == 2:  # Briefing & plan
-                            from writer import generate_chunked_briefing
                             ctx = pl.get("context_doc") or ""
                             text, in_t, out_t = generate_chunked_briefing(
                                 keyword=pl["keyword"],
@@ -691,7 +692,6 @@ elif page == "generate":
                             detail = f"{wc} mots"
 
                         elif s == 3:  # Article complet
-                            from writer import generate_article_by_sections
                             user_feedback = pl.get("user_feedback", "")
                             feedback_block = f"\n\n--- FEEDBACK UTILISATEUR ---\n{user_feedback}\n--- FIN FEEDBACK ---" if user_feedback else ""
                             briefing_with_feedback = pl["briefing"] + feedback_block
@@ -781,7 +781,6 @@ elif page == "generate":
         elif pl["step"] == 5 and not pl["stopped"]:
             progress_ph.progress(100)
 
-            from writer import ArticleOutput, format_final_output
             from cost_tracker import RequestCost
 
             article              = ArticleOutput(keyword=pl["keyword"], site_url=pl["site_url"])

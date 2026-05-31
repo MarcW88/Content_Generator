@@ -458,10 +458,10 @@ def build_article_context(briefing: str) -> str:
     # Build summary
     if context_parts:
         summary = '\n\n'.join(context_parts)
-        # Limit to 500 words
+        # Limit to 300 mots (reduced from 500 for efficiency)
         words = summary.split()
-        if len(words) > 500:
-            summary = ' '.join(words[:500]) + "..."
+        if len(words) > 300:
+            summary = ' '.join(words[:300]) + "..."
         return summary
     else:
         # Fallback: simple truncation of briefing
@@ -834,8 +834,11 @@ Retourne UNIQUEMENT le contenu de cette section en markdown (sans le titre).
         total_in += in_t
         total_out += out_t
 
-        # Prepare continuation instruction
-        continuation = f"CONTINUE from previous output. DO NOT repeat headers already written. Continue directly with the next content.\n\nPrevious output ended with:\n{section[-500:]}"
+        # Prepare continuation instruction (reduced to avoid redites and save tokens)
+        continuation = (
+            f"CONTINUE from previous output. Ne répète pas ce qui a déjà été dit.\n\n"
+            f"Fin de la section précédente :\n{section[-200:]}"
+        )
 
     full_article = "\n\n".join(sections)
     logger.info("[ChunkedArticle] Complete — %d chunks, %d total tokens", len(sections), total_in + total_out)
@@ -868,7 +871,9 @@ def run_writing_pipeline(
     seo_brief: str,
 ) -> ArticleOutput:
     """
-    Legacy 4-pass pipeline (kept for reference).
+    LEGACY 4-pass pipeline.
+    Utilisé uniquement par agent.py (CLI) pour l'instant.
+    La version Streamlit utilise generate_chunked_briefing + generate_article_by_sections.
     Returns a populated ArticleOutput.
     """
     output = ArticleOutput(keyword=keyword)
