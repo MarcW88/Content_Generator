@@ -532,7 +532,7 @@ def extract_h2_sections(briefing: str) -> list[tuple[str, str]]:
     sections = []
     lines = briefing.split('\n')
     current_h2 = None
-    
+
     for line in lines:
         h2_match = re.match(r'^##\s+(.+)$', line)
         if h2_match:
@@ -543,14 +543,39 @@ def extract_h2_sections(briefing: str) -> list[tuple[str, str]]:
             word_match = re.search(r'(\d+[-–]?\d*)\s*mots?', line, re.IGNORECASE)
             if word_match:
                 sections[-1] = (current_h2, word_match.group(1))
-    
+
     # If no word estimates found, return just titles with empty estimates
     if not any(word_est for _, word_est in sections):
         h2_pattern = re.compile(r'^##\s+(.+)$', re.MULTILINE)
         matches = h2_pattern.findall(briefing)
         return [(m.strip(), "") for m in matches if m.strip()]
-    
+
     return sections
+
+
+def calculate_max_tokens_from_word_estimate(word_estimate: str) -> int:
+    """Calculate max_tokens from word estimate string (e.g., '250-300' or '200').
+    Uses 1 word ≈ 1.5 tokens ratio with 30% buffer for markdown formatting.
+    """
+    import re
+    if not word_estimate:
+        return 800  # Default fallback
+
+    # Extract the maximum word count from estimate (e.g., "250-300" → 300)
+    match = re.search(r'(\d+)[-–]?(\d+)?', word_estimate)
+    if not match:
+        return 800
+
+    if match.group(2):  # Range like "250-300"
+        max_words = int(match.group(2))
+    else:  # Single number like "300"
+        max_words = int(match.group(1))
+
+    # Convert words to tokens (1 word ≈ 1.5 tokens) + 30% buffer
+    max_tokens = int(max_words * 1.5 * 1.3)
+
+    # Ensure minimum of 500 tokens and maximum of 2000
+    return max(500, min(max_tokens, 2000))
 
 
 def filter_briefing_for_content(briefing: str) -> str:
@@ -616,7 +641,9 @@ def generate_article_by_sections(
     seen_headers = set()
 
     for idx, (h2, word_est, chunk_idx, total_chunks) in enumerate(section_chunks, 1):
-        logger.info("[ChunkedArticle] Chunk %d/%d — %s (part %d/%d) — words: %s", idx, len(section_chunks), h2, chunk_idx + 1, total_chunks, word_est or "N/A")
+        # Calculate max_tokens based on word estimate
+        max_tokens = calculate_max_tokens_from_word_estimate(word_est)
+        logger.info("[ChunkedArticle] Chunk %d/%d — %s (part %d/%d) — words: %s — max_tokens: %d", idx, len(section_chunks), h2, chunk_idx + 1, total_chunks, word_est or "N/A", max_tokens)
 
         if total_chunks > 1:
             section_spec = f"## {h2}\nRédige la partie {chunk_idx + 1}/{total_chunks} de cette section avec ses sous-parties H3 si nécessaire."
@@ -631,7 +658,7 @@ def generate_article_by_sections(
         if continuation:
             prompt = f"{continuation}\n\n{prompt}"
 
-        section, in_t, out_t = _call_claude(system, prompt, max_tokens=4000)
+        section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
 
         # Post-process: remove duplicate headers
         if idx > 1:
