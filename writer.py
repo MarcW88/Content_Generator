@@ -507,6 +507,34 @@ def extract_style_rules(briefing: str) -> str:
 - Listes à puces pour énumérations (3-6 points max)"""
 
 
+def extract_writing_plan(briefing: str) -> str:
+    """Extract the Plan de Rédaction section from briefing.
+    Returns the complete plan section as a string.
+    """
+    import re
+    lines = briefing.split('\n')
+    plan_lines = []
+    in_plan_section = False
+
+    for line in lines:
+        header_match = re.match(r'^##\s+(.+)$', line, re.IGNORECASE)
+        if header_match:
+            section_name = header_match.group(1).lower()
+            if 'plan' in section_name and 'rédaction' in section_name:
+                in_plan_section = True
+                plan_lines.append(line)
+            elif in_plan_section:
+                # We've reached the next section, stop
+                break
+        elif in_plan_section:
+            plan_lines.append(line)
+
+    if plan_lines:
+        return '\n'.join(plan_lines)
+    else:
+        return ""
+
+
 def generate_chunked_briefing(
     keyword: str,
     site_url: str,
@@ -723,6 +751,9 @@ def generate_article_by_sections(
     
     # Extract compact style rules
     style_rules = extract_style_rules(briefing)
+    
+    # Extract writing plan for strict adherence
+    writing_plan = extract_writing_plan(briefing)
 
     if h2_sections is None:
         h2_sections = extract_h2_sections(briefing)
@@ -746,28 +777,38 @@ def generate_article_by_sections(
 
         # Build section spec with proper heading level
         if level == 'H2':
-            section_spec = f"## {title}\nRédige cette section complète avec ses sous-parties H3 si nécessaire."
+            section_spec = f"Section : {title}\nRédige cette section complète avec ses sous-parties H3 si nécessaire. NE commence PAS par ## {title}, rédige directement le contenu."
         else:
-            section_spec = f"### {title}\nRédige cette sous-section."
+            section_spec = f"Sous-section : {title}\nRédige cette sous-section. NE commence PAS par ### {title}, rédige directement le contenu."
 
-        # Build compact prompt with structured context
+        # Build compact prompt with structured context and explicit writing plan
         prompt = f"""{article_context}
 
 {style_rules}
 
+Plan de rédaction complet (à respecter à la lettre) :
+{writing_plan}
+
 Section à rédiger :
 {section_spec}
 
-IMPORTANT : Suis STRICTEMENT le plan de rédaction. Ne crée PAS de sections non prévues.
+IMPORTANT : Suis STRICTEMENT le plan de rédaction ci-dessus. Ne crée PAS de sections non prévues.
 Pour cette section, vise STRICTEMENT {word_est or "200-300"} mots comme indiqué dans le plan.
 Ne répète PAS les informations déjà couvertes dans les sections précédentes.
+NE commence PAS par le titre (## ou ###), rédige directement le contenu du paragraphe.
 
-Retourne UNIQUEMENT le contenu de cette section en markdown.
+Retourne UNIQUEMENT le contenu de cette section en markdown (sans le titre).
 """
         if continuation:
             prompt = f"{continuation}\n\n{prompt}"
 
         section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
+
+        # Add header to section for consistency
+        if level == 'H2':
+            section = f"## {title}\n\n{section}"
+        else:
+            section = f"### {title}\n\n{section}"
 
         # Post-process: remove duplicate headers
         if idx > 1:
@@ -796,7 +837,7 @@ Retourne UNIQUEMENT le contenu de cette section en markdown.
         continuation = f"CONTINUE from previous output. DO NOT repeat headers already written. Continue directly with the next content.\n\nPrevious output ended with:\n{section[-500:]}"
 
     full_article = "\n\n".join(sections)
-    logger.info("[ChunkedArticle] Complete — %d chunks, %d total tokens", len(section_chunks), total_in + total_out)
+    logger.info("[ChunkedArticle] Complete — %d chunks, %d total tokens", len(sections), total_in + total_out)
     return full_article, total_in, total_out
 
 
