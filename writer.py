@@ -250,15 +250,16 @@ Ton rôle :
 En t'appuyant sur ce contexte, rédige un plan de rédaction structuré et complet.
 
 À générer (en markdown, section ## Plan de Rédaction) :
-Plan de rédaction structuré H2 / H3 où chaque section précise
-l'intention de recherche spécifique à laquelle elle répond
-(ex. : « — intention : comprendre le coût »)
+Plan de rédaction structuré H2 / H3 où chaque section précise :
+- L'intention de recherche spécifique à laquelle elle répond (ex. : « — intention : comprendre le coût »)
+- Le nombre de mots estimé pour cette section (ex. : « — mots estimés : 250-300 »)
 
 Structure flexible :
 - Adapte le plan au sujet et à l'intention de recherche
 - Inclue les sections pertinentes selon le contexte (pas de structure imposée)
 - Le plan doit être complet et couvrir tous les aspects nécessaires
 - Pas de CTA final dans le plan
+- Le total des mots estimés pour toutes les sections doit se situer entre 1200 et 1800 mots
 
 Règles absolues :
 - Pas d'emoji dans le texte
@@ -379,6 +380,7 @@ mais ton OUTPUT ne doit contenir QUE le contenu de l'article basé sur le plan d
 N'inclus PAS les sections du briefing (CTA, angle différenciant, etc.) dans ta réponse.
 
 RESPECTE LA LONGUEUR CIBLE spécifiée dans le briefing (généralement 1200-1800 mots pour l'article complet).
+Pour cette section, vise STRICTEMENT {word_estimate} mots comme indiqué dans le plan de rédaction.
 Ne répète PAS les informations déjà couvertes dans les sections précédentes.
 Sois concis et va droit au but sans développements superflus.
 Chaque phrase doit apporter de l'information utile, pas de remplissage.
@@ -522,12 +524,33 @@ def generate_chunked_briefing(
     return full_briefing, total_in, total_out
 
 
-def extract_h2_sections(briefing: str) -> list[str]:
-    """Extract H2 section titles from briefing markdown."""
+def extract_h2_sections(briefing: str) -> list[tuple[str, str]]:
+    """Extract H2 section titles and word estimates from briefing markdown.
+    Returns list of tuples (title, word_estimate) where word_estimate is the estimated word count.
+    """
     import re
-    h2_pattern = re.compile(r'^##\s+(.+)$', re.MULTILINE)
-    matches = h2_pattern.findall(briefing)
-    return [m.strip() for m in matches if m.strip()]
+    sections = []
+    lines = briefing.split('\n')
+    current_h2 = None
+    
+    for line in lines:
+        h2_match = re.match(r'^##\s+(.+)$', line)
+        if h2_match:
+            current_h2 = h2_match.group(1).strip()
+            sections.append((current_h2, ""))  # Default empty word estimate
+        elif current_h2 and 'mots estimés' in line.lower():
+            # Extract word estimate from line like "— mots estimés : 250-300"
+            word_match = re.search(r'(\d+[-–]?\d*)\s*mots?', line, re.IGNORECASE)
+            if word_match:
+                sections[-1] = (current_h2, word_match.group(1))
+    
+    # If no word estimates found, return just titles with empty estimates
+    if not any(word_est for _, word_est in sections):
+        h2_pattern = re.compile(r'^##\s+(.+)$', re.MULTILINE)
+        matches = h2_pattern.findall(briefing)
+        return [(m.strip(), "") for m in matches if m.strip()]
+    
+    return sections
 
 
 def filter_briefing_for_content(briefing: str) -> str:
@@ -554,7 +577,7 @@ def filter_briefing_for_content(briefing: str) -> str:
 def generate_article_by_sections(
     briefing: str,
     system: str,
-    h2_sections: list[str] | None = None,
+    h2_sections: list[tuple[str, str]] | None = None,
 ) -> tuple[str, int, int]:
     """
     Generate article section by section to avoid token limits.
@@ -579,12 +602,12 @@ def generate_article_by_sections(
         # Split sections into smaller chunks
         chunks_per_section = (min_calls + len(h2_sections) - 1) // len(h2_sections)
         section_chunks = []
-        for h2 in h2_sections:
+        for h2, word_est in h2_sections:
             for i in range(chunks_per_section):
-                section_chunks.append((h2, i, chunks_per_section))
+                section_chunks.append((h2, word_est, i, chunks_per_section))
         logger.info("[ChunkedArticle] Splitting %d sections into %d chunks for minimum 5 calls", len(h2_sections), len(section_chunks))
     else:
-        section_chunks = [(h2, 0, 1) for h2 in h2_sections]
+        section_chunks = [(h2, word_est, 0, 1) for h2, word_est in h2_sections]
 
     sections = []
     total_in = 0
@@ -592,8 +615,8 @@ def generate_article_by_sections(
     continuation = ""
     seen_headers = set()
 
-    for idx, (h2, chunk_idx, total_chunks) in enumerate(section_chunks, 1):
-        logger.info("[ChunkedArticle] Chunk %d/%d — %s (part %d/%d)", idx, len(section_chunks), h2, chunk_idx + 1, total_chunks)
+    for idx, (h2, word_est, chunk_idx, total_chunks) in enumerate(section_chunks, 1):
+        logger.info("[ChunkedArticle] Chunk %d/%d — %s (part %d/%d) — words: %s", idx, len(section_chunks), h2, chunk_idx + 1, total_chunks, word_est or "N/A")
 
         if total_chunks > 1:
             section_spec = f"## {h2}\nRédige la partie {chunk_idx + 1}/{total_chunks} de cette section avec ses sous-parties H3 si nécessaire."
@@ -603,6 +626,7 @@ def generate_article_by_sections(
         prompt = ARTICLE_SECTION_PROMPT.format(
             briefing=filtered_briefing,
             section_spec=section_spec,
+            word_estimate=word_est or "200-300",
         )
         if continuation:
             prompt = f"{continuation}\n\n{prompt}"
