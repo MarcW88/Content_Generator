@@ -420,6 +420,93 @@ def _build_context_summary(text: str, max_words: int = 150) -> str:
     return " ".join(words[:max_words]) + "..."
 
 
+def build_article_context(briefing: str) -> str:
+    """Build a structured summary of the briefing for article generation (300-500 words).
+    Extracts key sections: Contexte, Angle, Intention, Tonalité.
+    """
+    import re
+    lines = briefing.split('\n')
+    context_parts = []
+    current_section = None
+    section_content = []
+
+    for line in lines:
+        header_match = re.match(r'^##\s+(.+)$', line, re.IGNORECASE)
+        if header_match:
+            # Save previous section if relevant
+            if current_section and section_content:
+                content = '\n'.join(section_content).strip()
+                if content and len(content.split()) > 10:  # Only keep non-empty sections
+                    section_name = current_section.lower()
+                    # Keep only relevant sections
+                    if any(kw in section_name for kw in ['contexte', 'angle', 'intention', 'tonalité', 'style']):
+                        context_parts.append(f"## {current_section}\n{content}")
+            # Start new section
+            current_section = header_match.group(1).strip()
+            section_content = []
+        else:
+            section_content.append(line)
+
+    # Don't forget last section
+    if current_section and section_content:
+        content = '\n'.join(section_content).strip()
+        if content and len(content.split()) > 10:
+            section_name = current_section.lower()
+            if any(kw in section_name for kw in ['contexte', 'angle', 'intention', 'tonalité', 'style']):
+                context_parts.append(f"## {current_section}\n{content}")
+
+    # Build summary
+    if context_parts:
+        summary = '\n\n'.join(context_parts)
+        # Limit to 500 words
+        words = summary.split()
+        if len(words) > 500:
+            summary = ' '.join(words[:500]) + "..."
+        return summary
+    else:
+        # Fallback: simple truncation of briefing
+        words = briefing.split()
+        return ' '.join(words[:400]) + "..."
+
+
+def extract_style_rules(briefing: str) -> str:
+    """Extract style rules from briefing into a compact block (10-15 lines).
+    Focuses on sentence length, paragraph structure, tone, and formatting.
+    """
+    import re
+    lines = briefing.split('\n')
+    style_rules = []
+    in_style_section = False
+
+    for line in lines:
+        header_match = re.match(r'^##\s+(.+)$', line, re.IGNORECASE)
+        if header_match:
+            section_name = header_match.group(1).lower()
+            in_style_section = any(kw in section_name for kw in ['tonalité', 'style'])
+            if in_style_section:
+                style_rules.append(f"# Style Rules")
+        elif in_style_section and line.strip():
+            # Extract key style indicators
+            if any(kw in line.lower() for kw in ['phrase', 'paragraphe', 'ton', 'voix', 'longueur', 'structure', 'liste', 'gras']):
+                style_rules.append(line.strip())
+            elif line.startswith('-') or line.startswith('•'):
+                style_rules.append(line.strip())
+
+    if style_rules:
+        # Limit to 15 lines
+        style_text = '\n'.join(style_rules[:15])
+        return style_text
+    else:
+        # Default style rules
+        return """# Style Rules
+- Phrases de 10-20 mots, une idée par phrase
+- Paragraphes de 2-4 phrases maximum
+- Voix active : "Votre chien a besoin de..." plutôt que "Des protéines sont nécessaires..."
+- Éviter le jargon non expliqué
+- Pas de langage marketing agressif
+- Listes à puces pour énumérations (3-6 points max)"""
+
+
 def generate_chunked_briefing(
     keyword: str,
     site_url: str,
@@ -531,31 +618,45 @@ def generate_chunked_briefing(
     return full_briefing, total_in, total_out
 
 
-def extract_h2_sections(briefing: str) -> list[tuple[str, str]]:
-    """Extract H2 section titles and word estimates from briefing markdown.
-    Returns list of tuples (title, word_estimate) where word_estimate is the estimated word count.
+def extract_h2_sections(briefing: str) -> list[tuple[str, str, str]]:
+    """Extract H2 and H3 section titles with word estimates from briefing markdown.
+    Returns list of tuples (title, level, word_estimate) where level is 'H2' or 'H3'.
     """
     import re
     sections = []
     lines = briefing.split('\n')
     current_h2 = None
+    current_h3 = None
 
     for line in lines:
         h2_match = re.match(r'^##\s+(.+)$', line)
+        h3_match = re.match(r'^###\s+(.+)$', line)
+        
         if h2_match:
             current_h2 = h2_match.group(1).strip()
-            sections.append((current_h2, ""))  # Default empty word estimate
-        elif current_h2 and 'mots estimés' in line.lower():
+            current_h3 = None
+            sections.append((current_h2, 'H2', ""))  # Default empty word estimate
+        elif h3_match and current_h2:
+            current_h3 = h3_match.group(1).strip()
+            sections.append((current_h3, 'H3', ""))  # Default empty word estimate
+        elif 'mots estimés' in line.lower():
             # Extract word estimate from line like "— mots estimés : 250-300"
             word_match = re.search(r'(\d+[-–]?\d*)\s*mots?', line, re.IGNORECASE)
             if word_match:
-                sections[-1] = (current_h2, word_match.group(1))
+                # Associate with the most recent section (H2 or H3)
+                if sections:
+                    title, level, _ = sections[-1]
+                    sections[-1] = (title, level, word_match.group(1))
 
     # If no word estimates found, return just titles with empty estimates
-    if not any(word_est for _, word_est in sections):
+    if not any(word_est for _, _, word_est in sections):
         h2_pattern = re.compile(r'^##\s+(.+)$', re.MULTILINE)
-        matches = h2_pattern.findall(briefing)
-        return [(m.strip(), "") for m in matches if m.strip()]
+        h3_pattern = re.compile(r'^###\s+(.+)$', re.MULTILINE)
+        h2_matches = h2_pattern.findall(briefing)
+        h3_matches = h3_pattern.findall(briefing)
+        result = [(m.strip(), 'H2', "") for m in h2_matches if m.strip()]
+        result.extend([(m.strip(), 'H3', "") for m in h3_matches if m.strip()])
+        return result
 
     return sections
 
@@ -609,37 +710,27 @@ def filter_briefing_for_content(briefing: str) -> str:
 def generate_article_by_sections(
     briefing: str,
     system: str,
-    h2_sections: list[tuple[str, str]] | None = None,
+    h2_sections: list[tuple[str, str, str]] | None = None,
 ) -> tuple[str, int, int]:
     """
     Generate article section by section to avoid token limits.
     If h2_sections is None, extract them from briefing.
-    Uses 5+ calls with continuation logic.
+    Uses structured context and treats H2/H3 independently.
     Returns (full_article, total_input_tokens, total_output_tokens).
     """
-    # Filter briefing to remove technical/SEO parts
-    filtered_briefing = filter_briefing_for_content(briefing)
+    # Build structured context (300-500 words)
+    article_context = build_article_context(briefing)
+    
+    # Extract compact style rules
+    style_rules = extract_style_rules(briefing)
 
     if h2_sections is None:
-        h2_sections = extract_h2_sections(filtered_briefing)
-        logger.info("[ChunkedArticle] Extracted %d H2 sections from briefing", len(h2_sections))
+        h2_sections = extract_h2_sections(briefing)
+        logger.info("[ChunkedArticle] Extracted %d sections (H2/H3) from briefing", len(h2_sections))
 
     if not h2_sections:
-        logger.warning("[ChunkedArticle] No H2 sections found, falling back to single call")
-        return _call_claude(system, ARTICLE_PROMPT.format(briefing=filtered_briefing, keyword=""), max_tokens=6000)
-
-    # Ensure minimum 5 calls by splitting sections if needed
-    min_calls = 5
-    if len(h2_sections) < min_calls:
-        # Split sections into smaller chunks
-        chunks_per_section = (min_calls + len(h2_sections) - 1) // len(h2_sections)
-        section_chunks = []
-        for h2, word_est in h2_sections:
-            for i in range(chunks_per_section):
-                section_chunks.append((h2, word_est, i, chunks_per_section))
-        logger.info("[ChunkedArticle] Splitting %d sections into %d chunks for minimum 5 calls", len(h2_sections), len(section_chunks))
-    else:
-        section_chunks = [(h2, word_est, 0, 1) for h2, word_est in h2_sections]
+        logger.warning("[ChunkedArticle] No sections found, falling back to single call")
+        return _call_claude(system, ARTICLE_PROMPT.format(briefing=article_context, keyword=""), max_tokens=6000)
 
     sections = []
     total_in = 0
@@ -647,21 +738,32 @@ def generate_article_by_sections(
     continuation = ""
     seen_headers = set()
 
-    for idx, (h2, word_est, chunk_idx, total_chunks) in enumerate(section_chunks, 1):
+    for idx, (title, level, word_est) in enumerate(h2_sections, 1):
         # Calculate max_tokens based on word estimate
         max_tokens = calculate_max_tokens_from_word_estimate(word_est)
-        logger.info("[ChunkedArticle] Chunk %d/%d — %s (part %d/%d) — words: %s — max_tokens: %d", idx, len(section_chunks), h2, chunk_idx + 1, total_chunks, word_est or "N/A", max_tokens)
+        logger.info("[ChunkedArticle] Section %d/%d — %s (%s) — words: %s — max_tokens: %d", 
+                    idx, len(h2_sections), title, level, word_est or "N/A", max_tokens)
 
-        if total_chunks > 1:
-            section_spec = f"## {h2}\nRédige la partie {chunk_idx + 1}/{total_chunks} de cette section avec ses sous-parties H3 si nécessaire."
+        # Build section spec with proper heading level
+        if level == 'H2':
+            section_spec = f"## {title}\nRédige cette section complète avec ses sous-parties H3 si nécessaire."
         else:
-            section_spec = f"## {h2}\nRédige cette section complète avec ses sous-parties H3 si nécessaire."
+            section_spec = f"### {title}\nRédige cette sous-section."
 
-        prompt = ARTICLE_SECTION_PROMPT.format(
-            briefing=filtered_briefing,
-            section_spec=section_spec,
-            word_estimate=word_est or "200-300",
-        )
+        # Build compact prompt with structured context
+        prompt = f"""{article_context}
+
+{style_rules}
+
+Section à rédiger :
+{section_spec}
+
+IMPORTANT : Suis STRICTEMENT le plan de rédaction. Ne crée PAS de sections non prévues.
+Pour cette section, vise STRICTEMENT {word_est or "200-300"} mots comme indiqué dans le plan.
+Ne répète PAS les informations déjà couvertes dans les sections précédentes.
+
+Retourne UNIQUEMENT le contenu de cette section en markdown.
+"""
         if continuation:
             prompt = f"{continuation}\n\n{prompt}"
 
