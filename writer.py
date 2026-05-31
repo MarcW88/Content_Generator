@@ -260,6 +260,7 @@ Structure flexible :
 - Le plan doit être complet et couvrir tous les aspects nécessaires
 - Pas de CTA final dans le plan
 - Le total des mots estimés pour toutes les sections doit se situer entre 1200 et 1800 mots
+- Termine OBLIGATOIREMENT par une ligne "Total estimé : X-Y mots" pour indiquer la complétude
 
 Règles absolues :
 - Pas d'emoji dans le texte
@@ -268,6 +269,29 @@ Règles absolues :
 - Le plan doit être généré en une seule fois (complet)
 
 Retourne UNIQUEMENT la section ## Plan de Rédaction complète.
+"""
+
+BRIEFING_PART2_PLAN_CONTINUATION = """\
+Voici le plan de rédaction commencé précédemment (incomplet) :
+
+{previous_content}
+
+Ton rôle :
+Continue le plan de rédaction à partir de là où il s'est arrêté.
+
+Instructions :
+- Ne répète PAS les sections déjà présentes
+- Continue avec les sections H2 manquantes
+- Chaque section doit préciser l'intention et le nombre de mots estimé
+- Termine OBLIGATOIREMENT par une ligne "Total estimé : X-Y mots"
+- Le total des mots estimés pour toutes les sections doit se situer entre 1200 et 1800 mots
+
+Règles absolues :
+- Pas d'emoji dans le texte
+- Pas de majuscule à chaque mot des titres
+- Phrases naturelles et fluides
+
+Retourne UNIQUEMENT la suite du plan de rédaction (sans répéter le début).
 """
 
 BRIEFING_PART2_TONALITY = """\
@@ -435,10 +459,23 @@ def generate_chunked_briefing(
     # Summary for next call
     summary2a = _build_context_summary(part1 + "\n\n" + part2a, max_words=120)
 
-    # Part 2b: Plan de Rédaction (single call, 12000 tokens for completeness)
+    # Part 2b: Plan de Rédaction (with continuation loop for completeness)
     logger.info("[ChunkedBriefing] Part 2b — Plan de Rédaction")
     p2b = BRIEFING_PART2_PLAN.format(context_summary=summary2a)
     part2b, in2b, out2b = _call_claude(system, p2b, max_tokens=12000)
+    
+    # Check if plan is complete (look for "Total estimé" line)
+    max_continuations = 3
+    continuation_count = 0
+    while "Total estimé" not in part2b and continuation_count < max_continuations:
+        continuation_count += 1
+        logger.info("[ChunkedBriefing] Plan de Rédaction incomplete, continuation %d/%d", continuation_count, max_continuations)
+        p2b_cont = BRIEFING_PART2_PLAN_CONTINUATION.format(previous_content=part2b)
+        continuation_part, in_cont, out_cont = _call_claude(system, p2b_cont, max_tokens=4000)
+        part2b += "\n\n" + continuation_part
+        in2b += in_cont
+        out2b += out_cont
+    
     parts.append(part2b)
     total_in += in2b
     total_out += out2b
