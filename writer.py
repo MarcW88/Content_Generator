@@ -535,6 +535,39 @@ def extract_writing_plan(briefing: str) -> str:
         return ""
 
 
+def _strip_briefing_leakage(text: str) -> str:
+    """Remove lines that look like briefing metadata leaking into article output."""
+    import re
+    bad_patterns = [
+        r"^\*\*Mots-clés",
+        r"^\*\*Recommandations",
+        r"^\*\*Angle",
+        r"^\*\*Points clés",
+        r"^\*\*Intention",
+        r"^\*\*Tonalité",
+        r"^\*\*Style",
+        r"^Meta (Title|Description)",
+        r"^#+\s+(SEO|Métas|Maillage|Checklist|Contexte & Positionnement|Intention & Points)",
+        r"---\s*(BRIEFING|FIN BRIEFING)",
+    ]
+    lines = text.split('\n')
+    cleaned = []
+    skip_block = False
+    for line in lines:
+        # Skip known briefing section headers and their content
+        if any(re.match(p, line.strip(), re.IGNORECASE) for p in bad_patterns):
+            skip_block = True
+            continue
+        # Resume at next ## heading that isn't in bad_patterns
+        if skip_block and re.match(r'^##\s+', line) and not any(
+            re.match(p, line.strip(), re.IGNORECASE) for p in bad_patterns
+        ):
+            skip_block = False
+        if not skip_block:
+            cleaned.append(line)
+    return '\n'.join(cleaned).strip()
+
+
 def generate_chunked_briefing(
     keyword: str,
     site_url: str,
@@ -746,11 +779,8 @@ def generate_article_by_sections(
     Uses structured context and treats H2/H3 independently.
     Returns (full_article, total_input_tokens, total_output_tokens).
     """
-    # Filter briefing to remove SEO/maillage/métas sections before building context
-    clean_brief = filter_briefing_for_content(briefing)
-    
-    # Build structured context (300-500 words) from clean briefing
-    article_context = build_article_context(clean_brief)
+    # Extract writing plan only (H2/H3 structure) - NOT editorial context
+    writing_plan = extract_writing_plan(briefing)
     
     # Extract compact style rules
     style_rules = extract_style_rules(briefing)
@@ -781,29 +811,33 @@ def generate_article_by_sections(
         else:
             section_spec = f"Sous-section : {title}\nRédige cette sous-section. NE commence PAS par ### {title}, rédige directement le contenu."
 
-        # Build compact prompt with structured context
-        prompt = f"""{article_context}
+        # Build compact prompt with writing plan and style rules
+        prompt = f"""{writing_plan}
 
 {style_rules}
 
-Section à rédiger :
-{section_spec}
+---
+Section à rédiger : {section_spec}
+Mots cibles : {word_est or "200-300"}
 
-IMPORTANT :
-- Rédige UNIQUEMENT du texte d'article destiné aux lecteurs.
-- N'inclus AUCUN élément de briefing (Contexte & Positionnement, Intention & Points clés, SEO & Technique, Mots-clés, Maillage, Métas, etc.).
-- Ne mentionne PAS les blocs "Recommandations de style", "Mots-clés à intégrer", "Recommandations de maillage", "Meta Title", "Meta Description", etc.
-- Ton texte doit être un article lisible pour le grand public, pas un briefing pour rédacteur.
-- Pour cette section, vise STRICTEMENT {word_est or "200-300"} mots.
-- Ne répète PAS les informations déjà couvertes dans les sections précédentes.
-- NE commence PAS par le titre (## ou ###), rédige directement le contenu du paragraphe.
+Règles strictes :
+- Rédige UNIQUEMENT du texte destiné aux lecteurs finaux (style article de blog / guide).
+- INTERDIT d'inclure : titres de sections du briefing, bullets "Mots-clés à intégrer",
+  "Recommandations de maillage", "Meta Title", "Angle différenciant", "Points clés", etc.
+- Ne commence PAS par le titre H2/H3 — le titre est ajouté automatiquement.
+- Ne répète PAS ce qui est déjà couvert dans les sections précédentes.
+- Vise exactement {word_est or "200-300"} mots, ni plus ni moins.
+- Structure GEO : commence par une phrase-réponse directe, puis développe.
 
-Retourne UNIQUEMENT le contenu de cette section en markdown (sans le titre).
+Retourne UNIQUEMENT le corps de la section en markdown (paragraphes et listes seulement).
 """
         if continuation:
             prompt = f"{continuation}\n\n{prompt}"
 
         section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
+
+        # Strip any briefing leakage from the output
+        section = _strip_briefing_leakage(section)
 
         # Add header to section for consistency
         if level == 'H2':
