@@ -509,7 +509,7 @@ def extract_style_rules(briefing: str) -> str:
 
 def extract_writing_plan(briefing: str) -> str:
     """Extract the Plan de Rédaction section from briefing.
-    Returns the complete plan section as a string.
+    Returns ONLY H2/H3 titles with word estimates, stripping all editorial context.
     """
     import re
     lines = briefing.split('\n')
@@ -517,9 +517,9 @@ def extract_writing_plan(briefing: str) -> str:
     in_plan_section = False
 
     for line in lines:
-        header_match = re.match(r'^##\s+(.+)$', line, re.IGNORECASE)
+        header_match = re.match(r'^(#{2,3})\s+(.+)$', line, re.IGNORECASE)
         if header_match:
-            section_name = header_match.group(1).lower()
+            section_name = header_match.group(2).lower()
             if 'plan' in section_name and 'rédaction' in section_name:
                 in_plan_section = True
                 plan_lines.append(line)
@@ -527,7 +527,10 @@ def extract_writing_plan(briefing: str) -> str:
                 # We've reached the next section, stop
                 break
         elif in_plan_section:
-            plan_lines.append(line)
+            # Only keep lines that look like word estimates or brief descriptions
+            # Skip long editorial paragraphs
+            if len(line.strip()) < 100 or 'mots estimés' in line.lower() or 'intention' in line.lower():
+                plan_lines.append(line)
 
     if plan_lines:
         return '\n'.join(plan_lines)
@@ -779,10 +782,7 @@ def generate_article_by_sections(
     Uses structured context and treats H2/H3 independently.
     Returns (full_article, total_input_tokens, total_output_tokens).
     """
-    # Extract writing plan only (H2/H3 structure) - NOT editorial context
-    writing_plan = extract_writing_plan(briefing)
-    
-    # Extract compact style rules
+    # Extract compact style rules only
     style_rules = extract_style_rules(briefing)
 
     if h2_sections is None:
@@ -791,7 +791,7 @@ def generate_article_by_sections(
 
     if not h2_sections:
         logger.warning("[ChunkedArticle] No sections found, falling back to single call")
-        return _call_claude(system, ARTICLE_PROMPT.format(briefing=article_context, keyword=""), max_tokens=6000)
+        return _call_claude(system, ARTICLE_PROMPT.format(briefing=briefing, keyword=""), max_tokens=6000)
 
     sections = []
     total_in = 0
@@ -811,10 +811,8 @@ def generate_article_by_sections(
         else:
             section_spec = f"Sous-section : {title}\nRédige cette sous-section. NE commence PAS par ### {title}, rédige directement le contenu."
 
-        # Build compact prompt with writing plan and style rules
-        prompt = f"""{writing_plan}
-
-{style_rules}
+        # Build compact prompt with style rules only
+        prompt = f"""{style_rules}
 
 ---
 Section à rédiger : {section_spec}
