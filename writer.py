@@ -371,10 +371,16 @@ Voici le briefing complet à suivre :
 ---FIN BRIEFING---
 
 Ta mission : rédiger UNIQUEMENT la section demandée ci-dessous, en respectant
-scrupuleusement le briefing.
+scrupuleusement le briefing et le plan de rédaction.
 
 Section à rédiger :
 {section_spec}
+
+CRITIQUE : Suis STRICTEMENT le plan de rédaction fourni dans le briefing.
+- Ne crée PAS de sections H2 ou H3 qui ne sont PAS dans le plan
+- N'ajoute PAS de sous-sections non prévues
+- Ne saute PAS de sections prévues dans le plan
+- Le plan de rédaction est la SEULE structure autorisée pour l'article
 
 IMPORTANT : Suis TOUTES les consignes du briefing (tonalité, style, positionnement)
 mais ton OUTPUT ne doit contenir QUE le contenu de l'article basé sur le plan de rédaction.
@@ -398,6 +404,7 @@ Règles absolues :
 - Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
 - Ne rédige PAS les autres sections de la page
 - OUTPUT : uniquement le contenu de l'article, pas de sections du briefing
+- NE DÉVIE PAS du plan de rédaction : structure fixe, pas d'ajouts, pas d'omissions
 
 Retourne UNIQUEMENT le contenu de cette section en markdown.
 """
