@@ -746,14 +746,14 @@ def generate_article_by_sections(
     Uses structured context and treats H2/H3 independently.
     Returns (full_article, total_input_tokens, total_output_tokens).
     """
-    # Build structured context (300-500 words)
-    article_context = build_article_context(briefing)
+    # Filter briefing to remove SEO/maillage/métas sections before building context
+    clean_brief = filter_briefing_for_content(briefing)
+    
+    # Build structured context (300-500 words) from clean briefing
+    article_context = build_article_context(clean_brief)
     
     # Extract compact style rules
     style_rules = extract_style_rules(briefing)
-    
-    # Extract writing plan for strict adherence
-    writing_plan = extract_writing_plan(briefing)
 
     if h2_sections is None:
         h2_sections = extract_h2_sections(briefing)
@@ -781,21 +781,22 @@ def generate_article_by_sections(
         else:
             section_spec = f"Sous-section : {title}\nRédige cette sous-section. NE commence PAS par ### {title}, rédige directement le contenu."
 
-        # Build compact prompt with structured context and explicit writing plan
+        # Build compact prompt with structured context
         prompt = f"""{article_context}
 
 {style_rules}
 
-Plan de rédaction complet (à respecter à la lettre) :
-{writing_plan}
-
 Section à rédiger :
 {section_spec}
 
-IMPORTANT : Suis STRICTEMENT le plan de rédaction ci-dessus. Ne crée PAS de sections non prévues.
-Pour cette section, vise STRICTEMENT {word_est or "200-300"} mots comme indiqué dans le plan.
-Ne répète PAS les informations déjà couvertes dans les sections précédentes.
-NE commence PAS par le titre (## ou ###), rédige directement le contenu du paragraphe.
+IMPORTANT :
+- Rédige UNIQUEMENT du texte d'article destiné aux lecteurs.
+- N'inclus AUCUN élément de briefing (Contexte & Positionnement, Intention & Points clés, SEO & Technique, Mots-clés, Maillage, Métas, etc.).
+- Ne mentionne PAS les blocs "Recommandations de style", "Mots-clés à intégrer", "Recommandations de maillage", "Meta Title", "Meta Description", etc.
+- Ton texte doit être un article lisible pour le grand public, pas un briefing pour rédacteur.
+- Pour cette section, vise STRICTEMENT {word_est or "200-300"} mots.
+- Ne répète PAS les informations déjà couvertes dans les sections précédentes.
+- NE commence PAS par le titre (## ou ###), rédige directement le contenu du paragraphe.
 
 Retourne UNIQUEMENT le contenu de cette section en markdown (sans le titre).
 """
