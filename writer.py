@@ -336,29 +336,6 @@ Règles absolues :
 Retourne UNIQUEMENT la section ## Métas complète.
 """
 
-BRIEFING_PART3_SEO_FAQ = """\
-Voici le résumé du briefing établi précédemment :
-
-{context_summary}
-
-Ton rôle :
-Complète le briefing avec les spécifications SEO détaillées (FAQ et technique).
-
-Données SEO disponibles :
-{seo_brief}
-
-À générer (en markdown, section ## FAQ & Technique) :
-1. Questions fréquentes (FAQ) à intégrer dans la page
-2. Checklist technique (si applicable)
-
-Règles absolues :
-- Pas d'emoji dans le texte
-- Pas de majuscule à chaque mot des titres
-- Phrases naturelles et fluides
-
-Retourne UNIQUEMENT la section ## FAQ & Technique complète.
-"""
-
 
 # ── Article Section Generation Prompts ───────────────────────────────────────────
 
@@ -505,20 +482,6 @@ def generate_chunked_briefing(
     total_in += in3b
     total_out += out3b
 
-    # Summary for next call
-    summary3b = _build_context_summary(part1 + "\n\n" + part2a + "\n\n" + part2b + "\n\n" + part2c + "\n\n" + part3a + "\n\n" + part3b, max_words=180)
-
-    # Part 3c: FAQ & Technique
-    logger.info("[ChunkedBriefing] Part 3c — FAQ & Technique")
-    p3c = BRIEFING_PART3_SEO_FAQ.format(
-        context_summary=summary3b,
-        seo_brief=seo_brief or "(aucune donnée SEO disponible)",
-    )
-    part3c, in3c, out3c = _call_claude(system, p3c, max_tokens=2000)
-    parts.append(part3c)
-    total_in += in3c
-    total_out += out3c
-
     full_briefing = "\n\n".join(parts)
     logger.info("[ChunkedBriefing] Complete — %d total tokens", total_in + total_out)
     return full_briefing, total_in, total_out
@@ -559,7 +522,7 @@ def filter_briefing_for_content(briefing: str) -> str:
     lines = briefing.split('\n')
     filtered = []
     skip_section = False
-    skip_keywords = ['seo', 'maillage', 'métas', 'checklist', 'mots-clés']
+    skip_keywords = ['seo', 'maillage', 'métas', 'checklist', 'mots-clés', 'faq']
     for line in lines:
         header_match = re.match(r'^##\s+(.+)$', line, re.IGNORECASE)
         if header_match:
