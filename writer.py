@@ -163,9 +163,6 @@ Voici le briefing validé à suivre EXACTEMENT :
 Ta mission : rédiger l'article complet sur le mot-clé «{keyword}» en respectant
 scrupuleusement ce briefing, le plan H2/H3 inclus.
 
-Avant de commencer, répète les sources de référence mentionnées dans le briefing
-(pour confirmer que tu utilises les bonnes), puis rédige l'article.
-
 Tu peux t'inspirer de ces sources mais ne les cite PAS dans l'article final.
 
 Principe GEO / AEO obligatoire :
@@ -180,6 +177,7 @@ Règles absolues :
 - Phrases naturelles et fluides, sans sur-optimisation du mot-clé
 - Suis le plan H2/H3 du briefing à la lettre
 - Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
+- Ne répète jamais les sources, concurrents, angle différenciant ou notes internes du briefing.
 """
 
 
@@ -947,6 +945,30 @@ Termine par une phrase complète.
     return _call_claude(system, prompt, max_tokens=min(max_tokens, 3000))
 
 
+def _continue_article_block(
+    system: str,
+    style_rules: str,
+    block_title: str,
+    section_text: str,
+) -> tuple[str, int, int]:
+    prompt = f"""{style_rules}
+
+La section suivante est coupée en fin de texte.
+
+Titre H2 : {block_title}
+
+Fin actuelle de la section :
+{section_text[-900:]}
+
+Continue UNIQUEMENT la fin de cette section.
+Ne répète pas le début.
+N'ajoute pas de nouveau H2.
+Termine par une phrase complète et conclusive.
+Retourne uniquement le texte à ajouter.
+"""
+    return _call_claude(system, prompt, max_tokens=900)
+
+
 def calculate_max_tokens_from_word_estimate(word_estimate: str) -> int:
     """Calculate max_tokens from word estimate string (e.g., '250-300' or '200').
     Uses 1 word ≈ 1.5 tokens ratio with 30% buffer for markdown formatting.
@@ -1027,8 +1049,30 @@ def generate_article_by_sections(
         logger.info("[ChunkedArticle] Extracted %d H2 blocks from briefing", len(blocks))
 
     if not blocks:
-        logger.warning("[ChunkedArticle] No sections found, falling back to single call")
-        return _call_claude(system, ARTICLE_PROMPT.format(briefing=briefing, keyword=""), max_tokens=6000)
+        logger.warning("[ChunkedArticle] No article blocks found. Using safe single-call fallback.")
+        safe_prompt = f"""{style_rules}
+
+Le plan structuré n'a pas pu être extrait automatiquement.
+Rédige l'article final à partir du briefing ci-dessous, mais sans jamais reprendre les sources,
+concurrents, notes internes, angle différenciant, métas ou recommandations SEO.
+
+Briefing :
+{briefing}
+
+Règles strictes :
+- Retourne uniquement l'article final en markdown.
+- Ne commence pas par une liste de sources ou de concurrents.
+- Ne génère pas de notes de briefing.
+- Termine par une phrase complète.
+"""
+        text, in_t, out_t = _call_claude(system, safe_prompt, max_tokens=6000)
+        text = _strip_briefing_leakage(text)
+        if _looks_truncated(text):
+            addition, cont_in, cont_out = _continue_article_block(system, style_rules, "Article", text)
+            text = f"{text.rstrip()} {addition.strip()}".strip()
+            in_t += cont_in
+            out_t += cont_out
+        return text, in_t, out_t
 
     sections = []
     total_in = 0
@@ -1118,6 +1162,17 @@ Retourne UNIQUEMENT ce bloc H2 complet en markdown.
                 section = f"## {block.title}\n\n{repaired}"
             in_t += repair_in
             out_t += repair_out
+            if _looks_truncated(section):
+                logger.warning("[ChunkedArticle] Continuing still-truncated block '%s'", block.title)
+                addition, cont_in, cont_out = _continue_article_block(
+                    system=system,
+                    style_rules=style_rules,
+                    block_title=block.title,
+                    section_text=section,
+                )
+                section = f"{section.rstrip()} {addition.strip()}".strip()
+                in_t += cont_in
+                out_t += cont_out
 
         sections.append(section)
         total_in += in_t
@@ -1145,6 +1200,9 @@ def _call_claude(system: str, user_prompt: str,
     text = message.content[0].text.strip() if message.content else ""
     in_tokens = message.usage.input_tokens if hasattr(message.usage, 'input_tokens') else 0
     out_tokens = message.usage.output_tokens if hasattr(message.usage, 'output_tokens') else 0
+    stop_reason = getattr(message, "stop_reason", "")
+    if stop_reason == "max_tokens":
+        logger.warning("[Claude] Output stopped because max_tokens=%s was reached", max_tokens or config.MAX_TOKENS_PER_PASS)
     return (text, in_tokens, out_tokens)
 
 
