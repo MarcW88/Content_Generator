@@ -17,6 +17,7 @@ Chaque passe injecte :
 """
 
 import logging
+import json
 from dataclasses import dataclass, field
 
 import anthropic
@@ -41,6 +42,16 @@ class ArticleOutput:
     full_article: str     = ""
     pass_logs: list[str]  = field(default_factory=list)
     cost: RequestCost     = field(default_factory=RequestCost)
+
+
+@dataclass
+class ArticleSectionBlock:
+    title: str
+    word_estimate: str = ""
+    intent: str = ""
+    must_cover: list[str] = field(default_factory=list)
+    avoid: list[str] = field(default_factory=list)
+    children: list[dict] = field(default_factory=list)
 
 
 # ── Shared prompt builder ──────────────────────────────────────────────────────
@@ -296,7 +307,32 @@ Règles absolues :
 - Phrases naturelles et fluides
 - Le plan doit être généré en une seule fois (complet)
 
-Retourne UNIQUEMENT la section ## Plan de Rédaction complète.
+Termine par un bloc JSON machine-readable exactement sous cette forme :
+```json
+{
+  "target_total_words": [1200, 1800],
+  "sections": [
+    {
+      "title": "Titre H2",
+      "intent": "intention spécifique",
+      "target_words": [250, 350],
+      "must_cover": ["point obligatoire"],
+      "avoid": ["sujet réservé à une autre section"],
+      "children": [
+        {
+          "title": "Titre H3",
+          "intent": "intention spécifique",
+          "target_words": [100, 160],
+          "must_cover": ["point obligatoire"],
+          "avoid": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+Retourne UNIQUEMENT la section ## Plan de Rédaction complète, avec le plan lisible puis le bloc JSON.
 """
 
 BRIEFING_PART2_PLAN_CONTINUATION = """\
@@ -773,6 +809,144 @@ def extract_h2_sections(briefing: str) -> list[tuple[str, str, str]]:
     return sections
 
 
+def _words_range_to_estimate(value) -> str:
+    if isinstance(value, list) and value:
+        nums = [int(v) for v in value if isinstance(v, int) or str(v).isdigit()]
+        if len(nums) >= 2:
+            return f"{nums[0]}-{nums[1]}"
+        if len(nums) == 1:
+            return str(nums[0])
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def extract_article_blocks(briefing: str) -> list[ArticleSectionBlock]:
+    """Extract a hierarchical H2/H3 article plan, preferring JSON and falling back to markdown."""
+    import re
+    json_candidates = re.findall(r'```json\s*(.*?)\s*```', briefing, re.DOTALL | re.IGNORECASE)
+    for candidate in reversed(json_candidates):
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        blocks = []
+        for section in data.get("sections", []):
+            if not isinstance(section, dict) or not section.get("title"):
+                continue
+            children = []
+            for child in section.get("children", []) or []:
+                if isinstance(child, dict) and child.get("title"):
+                    children.append({
+                        "title": str(child.get("title", "")).strip(),
+                        "intent": str(child.get("intent", "")).strip(),
+                        "word_estimate": _words_range_to_estimate(child.get("target_words")),
+                        "must_cover": child.get("must_cover", []) if isinstance(child.get("must_cover", []), list) else [],
+                        "avoid": child.get("avoid", []) if isinstance(child.get("avoid", []), list) else [],
+                    })
+            blocks.append(ArticleSectionBlock(
+                title=str(section.get("title", "")).strip(),
+                word_estimate=_words_range_to_estimate(section.get("target_words")),
+                intent=str(section.get("intent", "")).strip(),
+                must_cover=section.get("must_cover", []) if isinstance(section.get("must_cover", []), list) else [],
+                avoid=section.get("avoid", []) if isinstance(section.get("avoid", []), list) else [],
+                children=children,
+            ))
+        if blocks:
+            return blocks
+
+    blocks = []
+    current_block = None
+    for title, level, word_est in extract_h2_sections(briefing):
+        if level == "H2":
+            current_block = ArticleSectionBlock(title=title, word_estimate=word_est)
+            blocks.append(current_block)
+        elif level == "H3" and current_block:
+            current_block.children.append({
+                "title": title,
+                "intent": "",
+                "word_estimate": word_est,
+                "must_cover": [],
+                "avoid": [],
+            })
+    return blocks
+
+
+def _parse_word_estimate_bounds(word_estimate: str, default_min: int = 200, default_max: int = 300) -> tuple[int, int]:
+    import re
+    if not word_estimate:
+        return default_min, default_max
+    match = re.search(r'(\d+)[-–]?(\d+)?', word_estimate)
+    if not match:
+        return default_min, default_max
+    low = int(match.group(1))
+    high = int(match.group(2)) if match.group(2) else low
+    return min(low, high), max(low, high)
+
+
+def _count_text_words(text: str) -> int:
+    import re
+    return len(re.findall(r"\b[\wÀ-ÖØ-öø-ÿ'-]+\b", text))
+
+
+def _looks_truncated(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if stripped[-1] not in ".!?»)”]":
+        return True
+    last_words = stripped.split()[-4:]
+    if last_words and last_words[-1].lower().strip(" ,;:") in {"de", "du", "des", "à", "au", "aux", "et", "ou", "pour", "avec", "sans", "dans", "sur", "par"}:
+        return True
+    if stripped.count("(") > stripped.count(")") or stripped.count("[") > stripped.count("]"):
+        return True
+    return False
+
+
+def _section_validation_issues(text: str, min_words: int, max_words: int) -> list[str]:
+    issues = []
+    wc = _count_text_words(text)
+    if wc < int(min_words * 0.75):
+        issues.append(f"too_short:{wc}/{min_words}")
+    if wc > int(max_words * 1.6):
+        issues.append(f"too_long:{wc}/{max_words}")
+    if _looks_truncated(text):
+        issues.append("looks_truncated")
+    if any(marker in text.lower() for marker in ["meta title", "meta description", "mots-clés à intégrer", "recommandations de maillage"]):
+        issues.append("briefing_leakage")
+    return issues
+
+
+def _repair_article_block(
+    system: str,
+    style_rules: str,
+    block_title: str,
+    section_text: str,
+    target_words: str,
+    issues: list[str],
+) -> tuple[str, int, int]:
+    prompt = f"""{style_rules}
+
+La section suivante est incomplète ou non conforme.
+
+Titre H2 : {block_title}
+Mots cibles : {target_words}
+Problèmes détectés : {', '.join(issues)}
+
+Section actuelle :
+{section_text}
+
+Réécris UNIQUEMENT cette section complète.
+Garde le même titre H2 et les mêmes sous-titres H3 s'ils existent.
+Ne génère aucune note de briefing, aucun méta contenu, aucun commentaire.
+Termine par une phrase complète.
+"""
+    max_tokens = max(1200, calculate_max_tokens_from_word_estimate(target_words) + 600)
+    return _call_claude(system, prompt, max_tokens=min(max_tokens, 3000))
+
+
 def calculate_max_tokens_from_word_estimate(word_estimate: str) -> int:
     """Calculate max_tokens from word estimate string (e.g., '250-300' or '200').
     Uses 1 word ≈ 1.5 tokens ratio with 30% buffer for markdown formatting.
@@ -826,102 +1000,133 @@ def generate_article_by_sections(
 ) -> tuple[str, int, int]:
     """
     Generate article section by section to avoid token limits.
-    If h2_sections is None, extract them from briefing.
-    Uses structured context and treats H2/H3 independently.
+    If h2_sections is None, extract a hierarchical plan from briefing.
+    Uses structured H2 blocks and repairs incomplete sections.
     Returns (full_article, total_input_tokens, total_output_tokens).
     """
     # Extract compact style rules only
     style_rules = extract_style_rules(briefing)
 
-    if h2_sections is None:
-        h2_sections = extract_h2_sections(briefing)
-        logger.info("[ChunkedArticle] Extracted %d sections (H2/H3) from briefing", len(h2_sections))
+    if h2_sections:
+        blocks = []
+        current_block = None
+        for title, level, word_est in h2_sections:
+            if level == "H2":
+                current_block = ArticleSectionBlock(title=title, word_estimate=word_est)
+                blocks.append(current_block)
+            elif level == "H3" and current_block:
+                current_block.children.append({
+                    "title": title,
+                    "intent": "",
+                    "word_estimate": word_est,
+                    "must_cover": [],
+                    "avoid": [],
+                })
+    else:
+        blocks = extract_article_blocks(briefing)
+        logger.info("[ChunkedArticle] Extracted %d H2 blocks from briefing", len(blocks))
 
-    if not h2_sections:
+    if not blocks:
         logger.warning("[ChunkedArticle] No sections found, falling back to single call")
         return _call_claude(system, ARTICLE_PROMPT.format(briefing=briefing, keyword=""), max_tokens=6000)
 
     sections = []
     total_in = 0
     total_out = 0
-    continuation = ""
-    seen_headers = set()
+    covered_summary = []
+    outline = "\n".join(f"{i}. {block.title}" for i, block in enumerate(blocks, 1))
 
-    for idx, (title, level, word_est) in enumerate(h2_sections, 1):
-        # Calculate max_tokens based on word estimate
-        max_tokens = calculate_max_tokens_from_word_estimate(word_est)
-        logger.info("[ChunkedArticle] Section %d/%d — %s (%s) — words: %s — max_tokens: %d", 
-                    idx, len(h2_sections), title, level, word_est or "N/A", max_tokens)
+    for idx, block in enumerate(blocks, 1):
+        child_specs = []
+        child_word_estimates = []
+        for child in block.children:
+            child_specs.append(
+                f"- ### {child['title']} — intention : {child.get('intent') or 'non précisée'} — mots : {child.get('word_estimate') or '100-180'}"
+            )
+            child_word_estimates.append(child.get("word_estimate") or "")
+        children_block = "\n".join(child_specs) if child_specs else "Aucun H3 imposé."
 
-        # Build section spec with proper heading level
-        if level == 'H2':
-            section_spec = f"Section : {title}\nRédige cette section complète avec ses sous-parties H3 si nécessaire. NE commence PAS par ## {title}, rédige directement le contenu."
-        else:
-            section_spec = f"Sous-section : {title}\nRédige cette sous-section. NE commence PAS par ### {title}, rédige directement le contenu."
+        min_words, max_words = _parse_word_estimate_bounds(block.word_estimate, 250, 380)
+        for child_est in child_word_estimates:
+            c_min, c_max = _parse_word_estimate_bounds(child_est, 100, 160)
+            min_words += c_min
+            max_words += c_max
+        target_words = f"{min_words}-{max_words}"
+        max_tokens = min(max(calculate_max_tokens_from_word_estimate(target_words) + 700, 1200), 3000)
+        logger.info("[ChunkedArticle] H2 block %d/%d — %s — words: %s — max_tokens: %d",
+                    idx, len(blocks), block.title, target_words, max_tokens)
 
-        # Build compact prompt with style rules only
+        must_cover = "\n".join(f"- {item}" for item in block.must_cover) or "- Aucun point obligatoire explicite."
+        avoid = "\n".join(f"- {item}" for item in block.avoid) or "- Ne répète pas les sections précédentes."
+        covered = "\n".join(covered_summary[-5:]) or "Aucune section encore rédigée."
         prompt = f"""{style_rules}
 
 ---
-Section à rédiger : {section_spec}
-Mots cibles : {word_est or "200-300"}
+Plan global de l'article :
+{outline}
+
+Sections déjà couvertes :
+{covered}
+
+Bloc H2 à rédiger :
+## {block.title}
+Intention : {block.intent or "répondre clairement à l'intention de cette section"}
+Mots cibles pour ce bloc complet : {target_words}
+
+Sous-sections H3 à inclure dans ce bloc :
+{children_block}
+
+Points obligatoires :
+{must_cover}
+
+À éviter :
+{avoid}
 
 Règles strictes :
 - Rédige UNIQUEMENT du texte destiné aux lecteurs finaux (style article de blog / guide).
 - INTERDIT d'inclure : titres de sections du briefing, bullets "Mots-clés à intégrer",
   "Recommandations de maillage", "Meta Title", "Angle différenciant", "Points clés", etc.
-- Ne commence PAS par le titre H2/H3 — le titre est ajouté automatiquement.
+- Commence directement par le titre "## {block.title}".
+- Inclus uniquement les H3 listés ci-dessus, s'il y en a.
 - Ne répète PAS ce qui est déjà couvert dans les sections précédentes.
-- Vise exactement {word_est or "200-300"} mots, ni plus ni moins.
+- Vise {target_words} mots pour tout le bloc.
 - Structure GEO : commence par une phrase-réponse directe, puis développe.
+- Termine par une phrase complète.
 
-Retourne UNIQUEMENT le corps de la section en markdown (paragraphes et listes seulement).
+Retourne UNIQUEMENT ce bloc H2 complet en markdown.
 """
-        if continuation:
-            prompt = f"{continuation}\n\n{prompt}"
-
         section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
 
-        # Strip any briefing leakage from the output
         section = _strip_briefing_leakage(section)
-
-        # Add header to section for consistency
-        if level == 'H2':
-            section = f"## {title}\n\n{section}"
-        else:
-            section = f"### {title}\n\n{section}"
-
-        # Post-process: remove duplicate headers
-        if idx > 1:
-            import re
-            lines = section.split('\n')
-            filtered_lines = []
-            for line in lines:
-                header_match = re.match(r'^(#{1,3})\s+(.+)$', line)
-                if header_match:
-                    header_text = header_match.group(2).strip().lower()
-                    if header_text in seen_headers:
-                        continue
-                    seen_headers.add(header_text)
-                filtered_lines.append(line)
-            section = '\n'.join(filtered_lines)
-        else:
-            import re
-            for match in re.finditer(r'^(#{1,3})\s+(.+)$', section, re.MULTILINE):
-                seen_headers.add(match.group(2).strip().lower())
+        if not section.lstrip().startswith("##"):
+            section = f"## {block.title}\n\n{section}"
+        issues = _section_validation_issues(section, min_words, max_words)
+        if issues:
+            logger.warning("[ChunkedArticle] Repairing block '%s' because: %s", block.title, ", ".join(issues))
+            repaired, repair_in, repair_out = _repair_article_block(
+                system=system,
+                style_rules=style_rules,
+                block_title=block.title,
+                section_text=section,
+                target_words=target_words,
+                issues=issues,
+            )
+            repaired = _strip_briefing_leakage(repaired)
+            if repaired.lstrip().startswith("##"):
+                section = repaired
+            else:
+                section = f"## {block.title}\n\n{repaired}"
+            in_t += repair_in
+            out_t += repair_out
 
         sections.append(section)
         total_in += in_t
         total_out += out_t
-
-        # Prepare continuation instruction (reduced to avoid redites and save tokens)
-        continuation = (
-            f"CONTINUE from previous output. Ne répète pas ce qui a déjà été dit.\n\n"
-            f"Fin de la section précédente :\n{section[-200:]}"
-        )
+        section_words = _count_text_words(section)
+        covered_summary.append(f"- {block.title} : {section_words} mots rédigés")
 
     full_article = "\n\n".join(sections)
-    logger.info("[ChunkedArticle] Complete — %d chunks, %d total tokens", len(sections), total_in + total_out)
+    logger.info("[ChunkedArticle] Complete — %d H2 blocks, %d total tokens", len(sections), total_in + total_out)
     return full_article, total_in, total_out
 
 
