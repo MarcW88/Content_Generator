@@ -15,7 +15,7 @@ import streamlit as st
 import config
 from cost_tracker import estimate_request_cost, format_usd, PassCost
 from writer import (
-    _build_system, _call_claude,
+    _build_article_system, _build_briefing_system, _build_meta_system, _call_claude,
     BRIEFING_PROMPT, ARTICLE_PROMPT, META_PROMPT,
     generate_chunked_briefing, generate_article_by_sections,
     ArticleOutput, format_final_output
@@ -395,12 +395,15 @@ elif page == "generate":
                 "intel_intent":    "",
                 "intel_serp_titles": [],
                 "briefing":         None,
+                "draft_article":    None,
                 "full_article":     None,
                 "meta_title":       "",
                 "meta_description": "",
                 "geo_check":        [],
                 "internal_link_suggestions": [],
-                "system_prompt":    None,
+                "briefing_system_prompt": None,
+                "article_system_prompt":  None,
+                "meta_system_prompt":     None,
                 "lang":             "fr",
                 "user_feedback":    "",
                 # stepper display
@@ -548,11 +551,12 @@ elif page == "generate":
                                  key=f"redo_btn_{step_done}"):
                         # Clear outputs from redo_idx onwards
                         _clear = {
-                            0: ["style_ctx", "style_profile", "system_prompt"],
+                            0: ["style_ctx", "style_profile", "briefing_system_prompt",
+                                "article_system_prompt", "meta_system_prompt"],
                             1: ["seo_brief", "intel_paa", "intel_secondary", "intel_lsi",
                                 "intel_longtail", "intel_cannib", "intel_intent", "intel_serp_titles"],
                             2: ["briefing"],
-                            3: ["full_article"],
+                            3: ["full_article", "draft_article"],
                             4: ["meta_title", "meta_description", "geo_check",
                                 "internal_link_suggestions"],
                         }
@@ -668,13 +672,12 @@ elif page == "generate":
                         _cost  = 0.0
 
                     elif s in (2, 3, 4):
-                        if pl["system_prompt"] is None:
-                            pl["system_prompt"] = _build_system(
-                                pl["style_ctx"] or "", pl["seo_brief"] or "",
-                                lang=pl.get("lang", "fr"))
-                        system = pl["system_prompt"]
-
                         if s == 2:  # Briefing & plan
+                            if pl.get("briefing_system_prompt") is None:
+                                pl["briefing_system_prompt"] = _build_briefing_system(
+                                    pl["style_ctx"] or "", pl["seo_brief"] or "",
+                                    lang=pl.get("lang", "fr"))
+                            system = pl["briefing_system_prompt"]
                             ctx = pl.get("context_doc") or ""
                             text, in_t, out_t = generate_chunked_briefing(
                                 keyword=pl["keyword"],
@@ -692,6 +695,10 @@ elif page == "generate":
                             detail = f"{wc} mots"
 
                         elif s == 3:  # Article complet
+                            if pl.get("article_system_prompt") is None:
+                                pl["article_system_prompt"] = _build_article_system(
+                                    pl["style_ctx"] or "", lang=pl.get("lang", "fr"))
+                            system = pl["article_system_prompt"]
                             user_feedback = pl.get("user_feedback", "")
                             feedback_block = f"\n\n--- FEEDBACK UTILISATEUR ---\n{user_feedback}\n--- FIN FEEDBACK ---" if user_feedback else ""
                             briefing_with_feedback = pl["briefing"] + feedback_block
@@ -699,12 +706,16 @@ elif page == "generate":
                                 briefing=briefing_with_feedback,
                                 system=system,
                             )
+                            pl["draft_article"] = text
                             pl["full_article"] = text
                             wc = _count_words(text)
                             st.write(f"Article — {wc} mots (chunked)")
                             detail = f"{wc} mots"
 
                         elif s == 4:  # Métas + révision
+                            if pl.get("meta_system_prompt") is None:
+                                pl["meta_system_prompt"] = _build_meta_system(lang=pl.get("lang", "fr"))
+                            system = pl["meta_system_prompt"]
                             prompt = META_PROMPT.format(
                                 full_article=pl["full_article"] or ""
                             )
@@ -806,7 +817,10 @@ elif page == "generate":
                 "meta_title":       pl["meta_title"],
                 "meta_description": pl["meta_description"],
                 "briefing":         pl["briefing"] or "",
+                "draft_article":    pl.get("draft_article") or "",
+                "final_article":    pl["full_article"] or "",
                 "full_article":     pl["full_article"],
+                "revision_applied": bool((pl.get("draft_article") or "") != (pl["full_article"] or "")),
                 "word_count":       _count_words(pl["full_article"] or ""),
                 "pass_logs":        [],
                 "generated_at":     datetime.now().isoformat(),

@@ -64,6 +64,31 @@ Chaque phrase doit apporter de la valeur factuelle ou pratique.
 """
 
 
+def _build_briefing_system(style_context: str, seo_brief: str, lang: str = "fr") -> str:
+    return _build_system(style_context, seo_brief, lang=lang)
+
+
+def _build_article_system(style_context: str, lang: str = "fr") -> str:
+    lang_rule = _LANG_RULES.get(lang, _LANG_RULES["fr"])
+    return f"""{lang_rule}
+Tu rédiges uniquement du contenu d'article destiné aux lecteurs finaux.
+Tu n'ajoutes JAMAIS de sections de briefing, métadonnées, recommandations SEO ou notes internes.
+Tu respectes strictement la section demandée et tu n'inventes pas de nouveaux H2/H3.
+Chaque phrase doit apporter une information utile, concrète et non répétitive.
+
+{style_context}
+"""
+
+
+def _build_meta_system(lang: str = "fr") -> str:
+    lang_rule = _LANG_RULES.get(lang, _LANG_RULES["fr"])
+    return f"""{lang_rule}
+Tu produis uniquement des métadonnées et des vérifications structurelles.
+Tu ne réécris jamais l'article complet.
+Tu respectes strictement le format de sortie demandé.
+"""
+
+
 # ── Passe Briefing ─────────────────────────────────────────────────────────────
 
 BRIEFING_PROMPT = """\
@@ -473,41 +498,52 @@ def build_article_context(briefing: str) -> str:
 
 
 def extract_style_rules(briefing: str) -> str:
-    """Extract style rules from briefing into a compact block (10-15 lines).
-    Focuses on sentence length, paragraph structure, tone, and formatting.
-    """
+    """Return strict style rules for article generation without editorial briefing content."""
     import re
     lines = briefing.split('\n')
     style_rules = []
     in_style_section = False
+    allowed_keywords = [
+        'phrase', 'phrases', 'paragraphe', 'paragraphes', 'voix active',
+        'jargon', 'liste', 'listes', 'ton ', 'ton:', 'vocabulaire', 'style',
+        'gras', 'markdown', 'lisible', 'naturel', 'fluide',
+    ]
+    forbidden_keywords = [
+        'mots-clés', 'mots clés', 'maillage', 'meta title', 'meta description',
+        'angle', 'intention', 'points clés', 'seo', 'source', 'serp',
+        'longueur cible', 'répartition', 'éléments visuels',
+    ]
 
     for line in lines:
         header_match = re.match(r'^##\s+(.+)$', line, re.IGNORECASE)
         if header_match:
             section_name = header_match.group(1).lower()
             in_style_section = any(kw in section_name for kw in ['tonalité', 'style'])
-            if in_style_section:
-                style_rules.append(f"# Style Rules")
         elif in_style_section and line.strip():
-            # Extract key style indicators
-            if any(kw in line.lower() for kw in ['phrase', 'paragraphe', 'ton', 'voix', 'longueur', 'structure', 'liste', 'gras']):
-                style_rules.append(line.strip())
-            elif line.startswith('-') or line.startswith('•'):
+            clean_line = line.strip()
+            lower_line = clean_line.lower()
+            if any(kw in lower_line for kw in forbidden_keywords):
+                continue
+            if (clean_line.startswith('-') or clean_line.startswith('•')) and any(
+                kw in lower_line for kw in allowed_keywords
+            ):
+                style_rules.append(clean_line)
+            elif len(clean_line) <= 120 and any(kw in lower_line for kw in allowed_keywords):
                 style_rules.append(line.strip())
 
-    if style_rules:
-        # Limit to 15 lines
-        style_text = '\n'.join(style_rules[:15])
-        return style_text
-    else:
-        # Default style rules
-        return """# Style Rules
+    default_rules = """# Style Rules
 - Phrases de 10-20 mots, une idée par phrase
 - Paragraphes de 2-4 phrases maximum
 - Voix active : "Votre chien a besoin de..." plutôt que "Des protéines sont nécessaires..."
 - Éviter le jargon non expliqué
 - Pas de langage marketing agressif
-- Listes à puces pour énumérations (3-6 points max)"""
+- Listes à puces pour énumérations (3-6 points max)
+- Ne jamais inclure de sections de briefing, notes SEO, métas, maillage ou recommandations internes"""
+
+    if style_rules:
+        style_text = '\n'.join(style_rules[:8])
+        return f"{default_rules}\n{style_text}"
+    return default_rules
 
 
 def extract_writing_plan(briefing: str) -> str:
