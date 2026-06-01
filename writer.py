@@ -307,27 +307,27 @@ Règles absolues :
 
 Termine par un bloc JSON machine-readable exactement sous cette forme :
 ```json
-{
+{{
   "target_total_words": [1200, 1800],
   "sections": [
-    {
+    {{
       "title": "Titre H2",
       "intent": "intention spécifique",
       "target_words": [250, 350],
       "must_cover": ["point obligatoire"],
       "avoid": ["sujet réservé à une autre section"],
       "children": [
-        {
+        {{
           "title": "Titre H3",
           "intent": "intention spécifique",
           "target_words": [100, 160],
           "must_cover": ["point obligatoire"],
           "avoid": []
-        }
+        }}
       ]
-    }
+    }}
   ]
-}
+}}
 ```
 
 Retourne UNIQUEMENT la section ## Plan de Rédaction complète, avec le plan lisible puis le bloc JSON.
