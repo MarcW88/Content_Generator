@@ -150,7 +150,7 @@ Règles absolues :
 # ── Passe Méta + Révision ──────────────────────────────────────────────────────
 
 META_PROMPT = """\
-Tu reçois l'article complet ci-dessous. Effectue la révision finale.
+Tu reçois l'article complet ci-dessous. Génère les métas et vérifie la structure.
 
 ## Article
 {full_article}
@@ -158,10 +158,15 @@ Tu reçois l'article complet ci-dessous. Effectue la révision finale.
 Tâches :
 1. Méta-title : 50-60 caractères, mot-clé en début, accrocheur, pas de majuscule à chaque mot
 2. Méta-description : 140-160 caractères, bénéfice clair, verbe d'action
-3. Révision légère : incohérences de ton, répétitions, transitions
-4. CTA final : 1 phrase de CTA de fin d'article aligné avec le style du site
-5. Vérification GEO : pour chaque H2/H3, vérifie qu'il commence par une phrase-réponse
-   directe (« réponse courte d'abord »). Corrige ceux qui ne respectent pas ce principe.
+3. CTA final : 1 phrase de CTA de fin d'article aligné avec le style du site
+4. Vérification GEO : pour chaque H2/H3, vérifie qu'il commence par une phrase-réponse
+   directe (« réponse courte d'abord »). Signale les sections non conformes, sans réécrire l'article.
+
+Interdictions absolues :
+- Ne réécris PAS l'article complet.
+- Ne modifie PAS la structure H2/H3.
+- Ne génère PAS de version révisée de l'article.
+- Ne retourne AUCUN contenu d'article, sauf le CTA final.
 
 Retourne EXACTEMENT dans ce format (balises incluses, rien d'autre avant ===META_TITLE===) :
 
@@ -173,8 +178,6 @@ Retourne EXACTEMENT dans ce format (balises incluses, rien d'autre avant ===META
 <une ligne par H2/H3 : Titre section — intention couverte : oui/non>
 ===CTA_FINAL===
 <une phrase CTA>
-===REVISED_ARTICLE===
-<article complet révisé en markdown>
 ===END===
 """
 
@@ -683,27 +686,46 @@ def generate_chunked_briefing(
 
 
 def extract_h2_sections(briefing: str) -> list[tuple[str, str, str]]:
-    """Extract H2 and H3 section titles with word estimates from briefing markdown.
+    """Extract H2 and H3 section titles with word estimates from the Plan de Rédaction only.
     Returns list of tuples (title, level, word_estimate) where level is 'H2' or 'H3'.
     """
     import re
     sections = []
     lines = briefing.split('\n')
     current_h2 = None
-    current_h3 = None
+    in_plan_section = False
+    forbidden_titles = [
+        'contexte', 'positionnement', 'intention', 'points clés', 'plan de rédaction',
+        'tonalité', 'style', 'seo', 'technique', 'métas', 'metas', 'sources',
+        'checklist', 'mots-clés', 'mots clés', 'maillage', 'feedback utilisateur',
+    ]
 
     for line in lines:
         h2_match = re.match(r'^##\s+(.+)$', line)
         h3_match = re.match(r'^###\s+(.+)$', line)
-        
+
         if h2_match:
-            current_h2 = h2_match.group(1).strip()
-            current_h3 = None
-            sections.append((current_h2, 'H2', ""))  # Default empty word estimate
-        elif h3_match and current_h2:
-            current_h3 = h3_match.group(1).strip()
-            sections.append((current_h3, 'H3', ""))  # Default empty word estimate
-        elif 'mots estimés' in line.lower():
+            title = h2_match.group(1).strip()
+            title_lower = title.lower()
+            if 'plan' in title_lower and 'rédaction' in title_lower:
+                in_plan_section = True
+                current_h2 = None
+                continue
+            if in_plan_section and any(kw in title_lower for kw in forbidden_titles):
+                break
+            if in_plan_section:
+                current_h2 = title
+                sections.append((current_h2, 'H2', ""))
+            continue
+
+        if h3_match and in_plan_section and current_h2:
+            title = h3_match.group(1).strip()
+            title_lower = title.lower()
+            if not any(kw in title_lower for kw in forbidden_titles):
+                sections.append((title, 'H3', ""))
+            continue
+
+        if in_plan_section and 'mots estimés' in line.lower():
             # Extract word estimate from line like "— mots estimés : 250-300"
             word_match = re.search(r'(\d+[-–]?\d*)\s*mots?', line, re.IGNORECASE)
             if word_match:
@@ -711,16 +733,6 @@ def extract_h2_sections(briefing: str) -> list[tuple[str, str, str]]:
                 if sections:
                     title, level, _ = sections[-1]
                     sections[-1] = (title, level, word_match.group(1))
-
-    # If no word estimates found, return just titles with empty estimates
-    if not any(word_est for _, _, word_est in sections):
-        h2_pattern = re.compile(r'^##\s+(.+)$', re.MULTILINE)
-        h3_pattern = re.compile(r'^###\s+(.+)$', re.MULTILINE)
-        h2_matches = h2_pattern.findall(briefing)
-        h3_matches = h3_pattern.findall(briefing)
-        result = [(m.strip(), 'H2', "") for m in h2_matches if m.strip()]
-        result.extend([(m.strip(), 'H3', "") for m in h3_matches if m.strip()])
-        return result
 
     return sections
 

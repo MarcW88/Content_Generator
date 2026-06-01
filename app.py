@@ -720,14 +720,13 @@ elif page == "generate":
                             meta_title       = _extract("META_TITLE",       "META_DESCRIPTION", text)
                             meta_description = _extract("META_DESCRIPTION",  "GEO_CHECK",        text)
                             geo_raw          = _extract("GEO_CHECK",         "CTA_FINAL",        text)
-                            cta_final        = _extract("CTA_FINAL",         "REVISED_ARTICLE",  text)
-                            revised          = _extract("REVISED_ARTICLE",   "END",              text)
+                            cta_final        = _extract("CTA_FINAL",         "END",              text)
 
                             pl["meta_title"]       = meta_title or pl["meta_title"]
                             pl["meta_description"] = meta_description or pl["meta_description"]
                             pl["geo_check"]        = [l.strip() for l in geo_raw.splitlines() if l.strip()]
-                            if revised:
-                                pl["full_article"] = f"{revised}\n\n{cta_final}".strip() if cta_final else revised
+                            if cta_final and cta_final not in (pl["full_article"] or ""):
+                                pl["full_article"] = f"{pl['full_article']}\n\n{cta_final}".strip()
 
                             st.write(f"Meta title ({len(pl['meta_title'])} car.) : {pl['meta_title']}")
                             st.write(f"Meta desc. ({len(pl['meta_description'])} car.)")
