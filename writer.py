@@ -181,6 +181,9 @@ Règles absolues :
 - Évite les formulations anthropomorphiques ou inadaptées aux animaux : un chien ne "mérite pas de savoir" et ne "prospère" pas.
 - Adresse les conseils au maître/propriétaire quand il s'agit de compréhension, choix ou décision.
 - Évite les répétitions d'idées entre paragraphes et sections.
+- Nuance les affirmations métier : évite les positions dogmatiques, alarmistes ou trop catégoriques.
+- Adapte la validité du contenu au secteur du client : distingue les faits établis, les recommandations générales et les cas particuliers.
+- Si tu cites des chiffres, taux, prix, normes ou comparaisons techniques, précise le contexte de lecture et les limites utiles.
 """
 
 
@@ -583,6 +586,13 @@ def extract_style_rules(briefing: str) -> str:
 - Éviter les formulations anthropomorphiques ou inadaptées aux animaux : un chien ne "mérite pas de savoir" et ne "prospère" pas.
 - Adresser les conseils au maître/propriétaire quand il s'agit de compréhension, choix ou décision.
 - Éviter les répétitions d'idées, d'exemples et de formulations entre paragraphes.
+- Ton expert mais accessible : pédagogique, rassurant, bienveillant, sans jargon inutile.
+- Éviter les formulations dogmatiques, extrêmes ou alarmistes ; préférer les nuances factuelles.
+- Adapter les affirmations au secteur du client : santé, nutrition, finance, droit, immobilier, technique, SaaS, e-commerce, etc.
+- Distinguer clairement les faits établis, les recommandations générales, les hypothèses et les cas particuliers.
+- Ne pas transformer une recommandation contextuelle en vérité absolue.
+- Si le sujet implique des chiffres, prix, taux, normes, performances ou comparaisons techniques, préciser le contexte, les limites et les critères de comparaison.
+- Pour les sujets sensibles ou réglementés, rester prudent : pas de promesse absolue, pas de garantie excessive, pas de conseil médical/juridique/financier personnalisé.
 - Ne jamais inclure de sections de briefing, notes SEO, métas, maillage ou recommandations internes"""
 
     if style_rules:
@@ -925,6 +935,11 @@ def _section_validation_issues(text: str, min_words: int, max_words: int) -> lis
         issues.append("looks_truncated")
     if any(marker in text.lower() for marker in ["meta title", "meta description", "mots-clés à intégrer", "recommandations de maillage"]):
         issues.append("briefing_leakage")
+    lower_text = text.lower()
+    if any(marker in lower_text for marker in ["mérite de savoir", "mérite aussi de savoir", "ne peut tout simplement pas prospérer"]):
+        issues.append("animal_wording")
+    if any(marker in lower_text for marker in ["toujours", "jamais", "sans aucun risque", "garanti à 100%", "source principale d'énergie"]):
+        issues.append("too_categorical_claim")
     return issues
 
 
@@ -950,6 +965,9 @@ Section actuelle :
 Réécris UNIQUEMENT cette section complète.
 Garde le même titre H2 et les mêmes sous-titres H3 s'ils existent.
 Ne génère aucune note de briefing, aucun méta contenu, aucun commentaire.
+Corrige les formulations anthropomorphiques ou inadaptées si le sujet concerne des animaux.
+Nuance les affirmations métier trop catégoriques.
+Clarifie les chiffres, taux, prix, normes ou comparaisons techniques en précisant le contexte et les limites utiles.
 Termine par une phrase complète.
 """
     max_tokens = max(1200, calculate_max_tokens_from_word_estimate(target_words) + 600)
@@ -1147,6 +1165,10 @@ Règles strictes :
 - Ne répète PAS la même idée, le même exemple ou la même formule à l'intérieur du bloc.
 - Utilise des termes précis et adaptés : pour un animal, évite les verbes anthropomorphiques ou inadaptés comme "mériter de savoir" ou "prospérer".
 - Adresse les actions de choix, compréhension et décision au maître/propriétaire, pas au chien.
+- Reste nuancé sur les sujets métier : pas de propos alarmiste, dogmatique ou trop catégorique.
+- Adapte les affirmations au secteur du client et signale les cas particuliers si une règle dépend du contexte.
+- Si tu cites des chiffres, taux, prix, performances, normes ou comparaisons techniques, précise les critères et limites de comparaison.
+- Pour les sujets sensibles ou réglementés, ne donne pas de conseil personnalisé et évite toute promesse absolue.
 - Vise {target_words} mots pour tout le bloc.
 - Structure GEO : commence par une phrase-réponse directe, puis développe.
 - Termine par une phrase complète.
