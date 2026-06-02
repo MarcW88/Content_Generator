@@ -1003,9 +1003,16 @@ elif page == "library":
                 if fname:
                     with open(os.path.join(config.OUTPUT_DIR, fname[0]), encoding="utf-8") as mf:
                         md_c = mf.read()
-                    dl1, dl2 = st.columns(2)
+                    html_name = fname[0].replace(".md", ".html")
+                    html_path = os.path.join(config.OUTPUT_DIR, html_name)
+                    html_c = ""
+                    if os.path.exists(html_path):
+                        with open(html_path, encoding="utf-8") as hf:
+                            html_c = hf.read()
+                    dl1, dl2, dl3 = st.columns(3)
                     dl1.download_button(".md",   md_c,                          fname[0],               "text/markdown",    key=f"lib_md_{fname[0]}")
                     dl2.download_button(".json", json.dumps(a, ensure_ascii=False, indent=2), fname[0].replace(".md",".json"), "application/json", key=f"lib_js_{fname[0]}")
+                    dl3.download_button(".html", html_c, html_name, "text/html", key=f"lib_html_{fname[0]}", disabled=not bool(html_c))
 
 
 # ══════════════════════════════════════════════════════════════════════════════

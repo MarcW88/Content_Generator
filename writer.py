@@ -178,6 +178,9 @@ Règles absolues :
 - Suis le plan H2/H3 du briefing à la lettre
 - Respecte le Style Profile du site pour le ton, le vocabulaire et le point de vue
 - Ne répète jamais les sources, concurrents, angle différenciant ou notes internes du briefing.
+- Évite les formulations anthropomorphiques ou inadaptées aux animaux : un chien ne "mérite pas de savoir" et ne "prospère" pas.
+- Adresse les conseils au maître/propriétaire quand il s'agit de compréhension, choix ou décision.
+- Évite les répétitions d'idées entre paragraphes et sections.
 """
 
 
@@ -469,6 +472,9 @@ Règles absolues :
 - Ne rédige PAS les autres sections de la page
 - OUTPUT : uniquement le contenu de l'article, pas de sections du briefing
 - NE DÉVIE PAS du plan de rédaction : structure fixe, pas d'ajouts, pas d'omissions
+- Évite les formulations anthropomorphiques ou inadaptées aux animaux : un chien ne "mérite pas de savoir" et ne "prospère" pas.
+- Adresse les conseils au maître/propriétaire quand il s'agit de compréhension, choix ou décision.
+- Ne répète pas deux fois la même idée ou le même exemple dans cette section.
 
 Retourne UNIQUEMENT le contenu de cette section en markdown.
 """
@@ -574,6 +580,9 @@ def extract_style_rules(briefing: str) -> str:
 - Éviter le jargon non expliqué
 - Pas de langage marketing agressif
 - Listes à puces pour énumérations (3-6 points max)
+- Éviter les formulations anthropomorphiques ou inadaptées aux animaux : un chien ne "mérite pas de savoir" et ne "prospère" pas.
+- Adresser les conseils au maître/propriétaire quand il s'agit de compréhension, choix ou décision.
+- Éviter les répétitions d'idées, d'exemples et de formulations entre paragraphes.
 - Ne jamais inclure de sections de briefing, notes SEO, métas, maillage ou recommandations internes"""
 
     if style_rules:
@@ -1135,6 +1144,9 @@ Règles strictes :
 - Commence directement par le titre "## {block.title}".
 - Inclus uniquement les H3 listés ci-dessus, s'il y en a.
 - Ne répète PAS ce qui est déjà couvert dans les sections précédentes.
+- Ne répète PAS la même idée, le même exemple ou la même formule à l'intérieur du bloc.
+- Utilise des termes précis et adaptés : pour un animal, évite les verbes anthropomorphiques ou inadaptés comme "mériter de savoir" ou "prospérer".
+- Adresse les actions de choix, compréhension et décision au maître/propriétaire, pas au chien.
 - Vise {target_words} mots pour tout le bloc.
 - Structure GEO : commence par une phrase-réponse directe, puis développe.
 - Termine par une phrase complète.
