@@ -984,7 +984,7 @@ elif page == "library":
 
         st.caption(f"{len(articles)} article(s)")
 
-        for a in articles:
+        for idx, a in enumerate(articles):
             cost_d  = a.get("cost", {})
             cost_str = format_usd(cost_d.get("total_usd", 0)) if cost_d else "—"
             date_str = a.get("generated_at","")[:16].replace("T"," à ")
@@ -1028,9 +1028,9 @@ elif page == "library":
                         with open(html_path, encoding="utf-8") as hf:
                             html_c = hf.read()
                     dl1, dl2, dl3 = st.columns(3)
-                    dl1.download_button(".md",   md_c,                          fname[0],               "text/markdown",    key=f"lib_md_{fname[0]}")
-                    dl2.download_button(".json", json.dumps(a, ensure_ascii=False, indent=2), fname[0].replace(".md",".json"), "application/json", key=f"lib_js_{fname[0]}")
-                    dl3.download_button(".html", html_c, html_name, "text/html", key=f"lib_html_{fname[0]}", disabled=not bool(html_c))
+                    dl1.download_button(".md",   md_c,                          fname[0],               "text/markdown",    key=f"lib_md_{idx}_{fname[0]}")
+                    dl2.download_button(".json", json.dumps(a, ensure_ascii=False, indent=2), fname[0].replace(".md",".json"), "application/json", key=f"lib_js_{idx}_{fname[0]}")
+                    dl3.download_button(".html", html_c, html_name, "text/html", key=f"lib_html_{idx}_{fname[0]}", disabled=not bool(html_c))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
