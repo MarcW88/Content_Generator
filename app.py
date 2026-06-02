@@ -263,7 +263,7 @@ elif page == "generate":
     if not pl or not pl.get("active"):
         st.markdown("## Nouveau contenu")
 
-        col_a, col_b, col_c, col_d = st.columns(4)
+        col_a, col_b, col_c = st.columns(3)
         with col_a:
             site_url = st.text_input("Site cible", placeholder="https://www.dogchef.com",
                                      key="gen_site_url")
@@ -275,7 +275,19 @@ elif page == "generate":
             country = st.text_input("Pays / marché cible",
                                     placeholder="Belgique",
                                     key="gen_country")
-        with col_d:
+        lang_col, type_col = st.columns(2)
+        with lang_col:
+            article_lang = st.selectbox(
+                "Langue de l'article",
+                options=[
+                    ("fr", "Français"),
+                    ("nl", "Néerlandais"),
+                    ("en", "Anglais"),
+                ],
+                format_func=lambda item: item[1],
+                key="gen_article_lang",
+            )[0]
+        with type_col:
             page_type = st.selectbox(
                 "Type de page",
                 options=[
@@ -379,6 +391,7 @@ elif page == "generate":
                 "keyword":       keyword,
                 "site_url":      site_url,
                 "country":       country,
+                "lang":          article_lang,
                 "page_type":     page_type,
                 "context_doc":   context_text,
                 "internal_links_data": internal_links_data,
@@ -603,21 +616,20 @@ elif page == "generate":
                         from tone_analyzer import (build_style_profile,
                                                    style_profile_to_system_context,
                                                    profile_cache_exists)
-                        cached = profile_cache_exists(pl["site_url"])
+                        target_lang = pl.get("lang", "fr")
+                        cached = profile_cache_exists(pl["site_url"], target_lang=target_lang)
                         if cached and not pl["refresh_style"]:
                             st.write(f"Style profile en cache pour {pl['site_url']}")
                         else:
-                            st.write(f"Scraping de {pl['site_url']} ...")
+                            st.write(f"Scraping de {pl['site_url']} — pages {target_lang.upper()} uniquement si disponibles ...")
                             if not config.FIRECRAWL_API_KEY:
                                 st.write("Firecrawl non configuré — fallback BeautifulSoup")
                         profile_data, sp_in, sp_out = build_style_profile(
-                            pl["site_url"], force_refresh=pl["refresh_style"])
+                            pl["site_url"], force_refresh=pl["refresh_style"], target_lang=target_lang)
                         style_ctx = style_profile_to_system_context(profile_data)
                         sp_cost   = PassCost(config.CLAUDE_OPUS, sp_in, sp_out).usd if sp_in else 0
                         pl["style_profile"] = profile_data
                         pl["style_ctx"]     = style_ctx
-                        detected_lang = str(profile_data.get("detected_language", "fr")).lower()[:2]
-                        pl["lang"] = detected_lang if detected_lang in ("fr", "nl", "en") else "fr"
                         scraped_count = profile_data.get("_scraped_count", 0)
                         scraped_urls  = profile_data.get("_pages_scraped", [])
                         if sp_in:

@@ -36,12 +36,13 @@ import config
 logger = logging.getLogger(__name__)
 
 
-def _cache_path(site_url: str) -> str:
+def _cache_path(site_url: str, target_lang: str = "") -> str:
     """One cache file per site URL."""
     import re
     slug = re.sub(r"[^a-z0-9]+", "-", site_url.lower().rstrip("/").replace("https://", "").replace("http://", ""))
+    lang_suffix = f"-{target_lang.lower()[:2]}" if target_lang else ""
     os.makedirs(config.STYLE_PROFILE_CACHE_DIR, exist_ok=True)
-    return os.path.join(config.STYLE_PROFILE_CACHE_DIR, f"{slug}.json")
+    return os.path.join(config.STYLE_PROFILE_CACHE_DIR, f"{slug}{lang_suffix}.json")
 
 
 # ── Scrapers ──────────────────────────────────────────────────────────────────
@@ -147,7 +148,38 @@ def _fetch_sitemap_urls(base: str) -> list[str]:
     return page_urls
 
 
-def _discover_page_urls(site_url: str, count: int) -> list[str]:
+def _url_matches_language(url: str, target_lang: str) -> bool:
+    if target_lang not in {"fr", "nl", "en"}:
+        return True
+    from urllib.parse import urlparse, parse_qs
+    parsed = urlparse(url.lower())
+    path = f"/{parsed.path.strip('/')}/"
+    query_lang = parse_qs(parsed.query).get("lang", []) + parse_qs(parsed.query).get("locale", [])
+    if any(value.lower().startswith(target_lang) for value in query_lang):
+        return True
+    if f"/{target_lang}/" in path or f"-{target_lang}/" in path or f"_{target_lang}/" in path:
+        return True
+    if target_lang == "fr" and any(segment in path for segment in ["/fr-be/", "/fr-fr/", "/fr/"]):
+        return True
+    if target_lang == "nl" and any(segment in path for segment in ["/nl-be/", "/nl-nl/", "/nl/"]):
+        return True
+    if target_lang == "en" and any(segment in path for segment in ["/en-gb/", "/en-us/", "/en/"]):
+        return True
+    has_lang_marker = any(marker in path for marker in [
+        "/fr/", "/fr-be/", "/fr-fr/", "/nl/", "/nl-be/", "/nl-nl/",
+        "/en/", "/en-gb/", "/en-us/",
+    ])
+    return not has_lang_marker
+
+
+def _filter_urls_by_language(urls: list[str], target_lang: str) -> list[str]:
+    if target_lang not in {"fr", "nl", "en"}:
+        return urls
+    matched = [url for url in urls if _url_matches_language(url, target_lang)]
+    return matched if len(matched) >= 3 else urls
+
+
+def _discover_page_urls(site_url: str, count: int, target_lang: str = "") -> list[str]:
     """
     Discover content pages to scrape.
     Priority: sitemap > robots.txt sitemap > homepage links > common paths.
@@ -165,6 +197,7 @@ def _discover_page_urls(site_url: str, count: int) -> list[str]:
     preferred = [u for u in sitemap_urls
                  if any(k in u.lower() for k in content_kws)]
     urls = preferred if len(preferred) >= 3 else sitemap_urls
+    urls = _filter_urls_by_language(urls, target_lang)
 
     # 2. Fallback: parse homepage <a> links
     if len(urls) < count:
@@ -264,12 +297,14 @@ def extract_style_profile(corpus: str) -> tuple[dict, int, int]:
 def build_style_profile(
     site_url: str,
     force_refresh: bool = False,
+    target_lang: str = "",
 ) -> tuple[dict, int, int]:
     """
     Return (style_profile_dict, input_tokens, output_tokens) for the given site URL.
     Uses a per-site cache file — tokens are 0 when loaded from cache.
     """
-    cache = _cache_path(site_url)
+    target_lang = (target_lang or "").lower()[:2]
+    cache = _cache_path(site_url, target_lang)
 
     if not force_refresh and os.path.exists(cache):
         logger.info("Loading cached style profile from %s", cache)
@@ -277,7 +312,7 @@ def build_style_profile(
             return json.load(f), 0, 0
 
     logger.info("Building style profile for %s …", site_url)
-    urls = _discover_page_urls(site_url, config.SCRAPE_PAGES_COUNT)
+    urls = _discover_page_urls(site_url, config.SCRAPE_PAGES_COUNT, target_lang=target_lang)
     logger.info("Discovered %d pages to scrape", len(urls))
 
     pages_text: list[str] = []
@@ -309,6 +344,7 @@ def build_style_profile(
 
     profile["_pages_scraped"] = urls[:len(pages_text)]
     profile["_scraped_count"] = len(pages_text)
+    profile["_target_language"] = target_lang
 
     with open(cache, "w") as f:
         json.dump(profile, f, ensure_ascii=False, indent=2)
@@ -317,9 +353,9 @@ def build_style_profile(
     return profile, in_t, out_t
 
 
-def profile_cache_exists(site_url: str) -> bool:
+def profile_cache_exists(site_url: str, target_lang: str = "") -> bool:
     """True if a cached style profile exists for this site."""
-    return os.path.exists(_cache_path(site_url))
+    return os.path.exists(_cache_path(site_url, (target_lang or "").lower()[:2]))
 
 
 def style_profile_to_system_context(profile: dict) -> str:
