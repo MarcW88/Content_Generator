@@ -810,6 +810,30 @@ elif page == "generate":
             ts   = datetime.now().strftime("%Y%m%d_%H%M")
             base = os.path.join(config.OUTPUT_DIR, f"{slug}_{ts}")
 
+            # Internal link suggestions
+            internal_links_data = pl.get("internal_links_data")
+            if internal_links_data and pl["full_article"]:
+                try:
+                    article_lower = pl["full_article"].lower()
+                    suggestions = []
+                    seen_urls: set = set()
+                    for row in internal_links_data:
+                        dest = str(row.get("To") or row.get("destination") or "")
+                        anchor = str(row.get("Anchor") or row.get("anchor") or "")
+                        title = str(row.get("Title") or row.get("title") or "")
+                        if dest in seen_urls or not dest.startswith("http"):
+                            continue
+                        score = sum(1 for w in (anchor + " " + title).lower().split()
+                                   if len(w) > 4 and w in article_lower)
+                        if score >= 2:
+                            suggestions.append({"url": dest, "anchor": anchor,
+                                               "title": title, "score": score})
+                            seen_urls.add(dest)
+                    suggestions.sort(key=lambda x: x["score"], reverse=True)
+                    pl["internal_link_suggestions"] = suggestions[:10]
+                except Exception:
+                    pass
+
             md_content = format_final_output(article)
             with open(f"{base}.md", "w", encoding="utf-8") as f:
                 f.write(md_content)
@@ -834,6 +858,7 @@ elif page == "generate":
                     "paa":                pl["intel_paa"],
                     "cannibalisations":   pl["intel_cannib"],
                     "sources_used":       [{"title": title, "url": url} for title, url in pl.get("intel_serp_titles", [])],
+                    "internal_links":     pl.get("internal_link_suggestions", []),
                 },
             }
             json_content = _json.dumps(bundle, ensure_ascii=False, indent=2)
@@ -841,20 +866,26 @@ elif page == "generate":
                 f.write(json_content)
 
             # HTML export
+            import html as _html_mod
             try:
                 import markdown as _md_lib
+                html_markdown = f"# {pl['meta_title'] or pl['keyword']}\n\n{pl['full_article'] or ''}"
+                if pl.get("internal_link_suggestions"):
+                    html_markdown += "\n\n## À lire aussi\n"
+                    for s in pl["internal_link_suggestions"][:6]:
+                        anchor = s.get("anchor") or s.get("title") or s.get("url")
+                        html_markdown += f"- [{anchor}]({s.get('url')})\n"
                 html_body = _md_lib.markdown(
-                    pl["full_article"] or "",
-                    extensions=["tables", "fenced_code", "nl2br"],
+                    html_markdown,
+                    extensions=["extra", "tables", "fenced_code", "sane_lists"],
                 )
             except Exception:
-                import html as _html_mod
                 import markdown as _md
-                html_body = _md.markdown(pl["full_article"] or "", extensions=['extra', 'tables'])
+                html_body = _md.markdown(f"# {pl['meta_title'] or pl['keyword']}\n\n{pl['full_article'] or ''}", extensions=['extra', 'tables'])
             html_content = f"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8">
-<title>{pl['meta_title'] or pl['keyword']}</title>
-<meta name="description" content="{pl['meta_description']}">
+<title>{_html_mod.escape(pl['meta_title'] or pl['keyword'])}</title>
+<meta name="description" content="{_html_mod.escape(pl['meta_description'] or '')}">
 <style>
   body {{ font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; color: #1a1d2e; line-height: 1.7; padding: 20px; }}
   h1,h2,h3 {{ color: #1a1d2e; }} h1 {{ font-size: 2em; }} h2 {{ font-size: 1.4em; }} h3 {{ font-size: 1.2em; }}
@@ -868,31 +899,6 @@ elif page == "generate":
 </body></html>"""
             with open(f"{base}.html", "w", encoding="utf-8") as f:
                 f.write(html_content)
-
-            # Internal link suggestions
-            internal_links_data = pl.get("internal_links_data")
-            if internal_links_data and pl["full_article"]:
-                try:
-                    article_lower = pl["full_article"].lower()
-                    suggestions = []
-                    seen_urls: set = set()
-                    for row in internal_links_data:
-                        dest = str(row.get("To") or row.get("destination") or "")
-                        anchor = str(row.get("Anchor") or row.get("anchor") or "")
-                        title = str(row.get("Title") or row.get("title") or "")
-                        if dest in seen_urls or not dest.startswith("http"):
-                            continue
-                        # Simple relevance: anchor or title words appear in article
-                        score = sum(1 for w in (anchor + " " + title).lower().split()
-                                   if len(w) > 4 and w in article_lower)
-                        if score >= 2:
-                            suggestions.append({"url": dest, "anchor": anchor,
-                                               "title": title, "score": score})
-                            seen_urls.add(dest)
-                    suggestions.sort(key=lambda x: x["score"], reverse=True)
-                    pl["internal_link_suggestions"] = suggestions[:10]
-                except Exception:
-                    pass
 
             pl["active"] = False
             st.success(f"Article enregistré — {bundle['word_count']} mots · Coût réel : {format_usd(article.cost.total_usd)}")
