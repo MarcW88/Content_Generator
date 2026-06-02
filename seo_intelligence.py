@@ -61,6 +61,8 @@ class GSCPage:
 @dataclass
 class SEOIntelligence:
     keyword: str
+    country: str = ""
+    location_code: int = config.DATAFORSEO_LOCATION
     serp_top10: list[SerpResult]        = field(default_factory=list)
     paa_questions: list[str]            = field(default_factory=list)
     keyword_cluster: KeywordCluster     = field(default_factory=lambda: KeywordCluster(""))
@@ -108,6 +110,64 @@ def infer_search_intent(keyword: str, titles: list[str]) -> str:
 
 # ── DataForSEO helpers ────────────────────────────────────────────────────────
 
+_COUNTRY_LOCATION_CODES = {
+    "belgique": 2056,
+    "belgium": 2056,
+    "be": 2056,
+    "france": 2250,
+    "fr": 2250,
+    "suisse": 2756,
+    "switzerland": 2756,
+    "ch": 2756,
+    "luxembourg": 2442,
+    "lu": 2442,
+    "canada": 2124,
+    "ca": 2124,
+}
+
+_COUNTRY_DOMAIN_HINTS = {
+    "belgique": [".be"],
+    "belgium": [".be"],
+    "be": [".be"],
+    "france": [".fr"],
+    "fr": [".fr"],
+    "suisse": [".ch"],
+    "switzerland": [".ch"],
+    "ch": [".ch"],
+    "luxembourg": [".lu"],
+    "lu": [".lu"],
+    "canada": [".ca"],
+    "ca": [".ca"],
+}
+
+_COUNTRY_EXCLUDED_HINTS = {
+    "belgique": [".fr"],
+    "belgium": [".fr"],
+    "be": [".fr"],
+}
+
+
+def _normalize_country(country: str) -> str:
+    return (country or "").strip().lower()
+
+
+def _location_code_for_country(country: str) -> int:
+    return _COUNTRY_LOCATION_CODES.get(_normalize_country(country), config.DATAFORSEO_LOCATION)
+
+
+def _is_country_relevant_url(url: str, country: str) -> bool:
+    normalized = _normalize_country(country)
+    if not normalized:
+        return True
+    lower_url = (url or "").lower()
+    excluded = _COUNTRY_EXCLUDED_HINTS.get(normalized, [])
+    if any(hint in lower_url for hint in excluded):
+        return False
+    required = _COUNTRY_DOMAIN_HINTS.get(normalized, [])
+    if required:
+        return any(hint in lower_url for hint in required)
+    return True
+
 def _dfs_request(endpoint: str, payload: list[dict]) -> dict:
     """Generic DataForSEO POST call with Basic Auth."""
     credentials = base64.b64encode(
@@ -126,7 +186,7 @@ def _dfs_request(endpoint: str, payload: list[dict]) -> dict:
     return resp.json()
 
 
-def fetch_serp(keyword: str) -> tuple[list[SerpResult], list[str]]:
+def fetch_serp(keyword: str, country: str = "") -> tuple[list[SerpResult], list[str]]:
     """
     Returns (top10 organic results, PAA questions) for the keyword.
     Uses DataForSEO SERP Live endpoint.
@@ -135,7 +195,7 @@ def fetch_serp(keyword: str) -> tuple[list[SerpResult], list[str]]:
         {
             "keyword": keyword,
             "language_code": config.DATAFORSEO_LANGUAGE,
-            "location_code": config.DATAFORSEO_LOCATION,
+            "location_code": _location_code_for_country(country),
             "device": "desktop",
             "depth": config.SERP_RESULTS_COUNT,
         }
@@ -151,10 +211,13 @@ def fetch_serp(keyword: str) -> tuple[list[SerpResult], list[str]]:
     for item in items:
         itype = item.get("type", "")
         if itype == "organic":
+            url = item.get("url", "")
+            if not _is_country_relevant_url(url, country):
+                continue
             organic.append(
                 SerpResult(
                     rank        = item.get("rank_absolute", 0),
-                    url         = item.get("url", ""),
+                    url         = url,
                     title       = item.get("title", ""),
                     description = item.get("description", ""),
                 )
@@ -196,7 +259,7 @@ def _parse_kw_items(items: list[dict], cluster: KeywordCluster,
             cluster.long_tail.append(kw)
 
 
-def fetch_keyword_cluster(keyword: str) -> KeywordCluster:
+def fetch_keyword_cluster(keyword: str, country: str = "") -> KeywordCluster:
     """
     Builds a rich semantic cluster by combining two DataForSEO endpoints:
     1. keywords_for_keywords  — variations sémantiques directes
@@ -212,7 +275,7 @@ def fetch_keyword_cluster(keyword: str) -> KeywordCluster:
             "dataforseo_labs/google/keywords_for_keywords/live",
             [{"keywords": [keyword],
               "language_code": config.DATAFORSEO_LANGUAGE,
-              "location_code": config.DATAFORSEO_LOCATION,
+              "location_code": _location_code_for_country(country),
               "limit": 50}],
         )
         items = (
@@ -231,7 +294,7 @@ def fetch_keyword_cluster(keyword: str) -> KeywordCluster:
             "dataforseo_labs/google/related_keywords/live",
             [{"keyword": keyword,
               "language_code": config.DATAFORSEO_LANGUAGE,
-              "location_code": config.DATAFORSEO_LOCATION,
+              "location_code": _location_code_for_country(country),
               "limit": 50,
               "depth": 2}],
         )
@@ -264,9 +327,11 @@ def fetch_keyword_cluster(keyword: str) -> KeywordCluster:
                     "role": "user",
                     "content": (
                         f"Donne-moi 15 variantes sémantiques du mot-clé '{keyword}' "
+                        f"pour le marché '{country or 'local'}' "
                         f"(synonymes, expressions longue traîne, questions, entités liées). "
                         f"Réponds UNIQUEMENT avec une liste de mots-clés séparés par des virgules, "
-                        f"sans numérotation ni explication. Langue : même que le mot-clé."
+                        f"sans numérotation ni explication. Langue : même que le mot-clé. "
+                        f"N'utilise pas d'expressions propres à un autre pays."
                     ),
                 }],
             )
@@ -412,22 +477,26 @@ def _build_recommended_h2s(
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def gather_seo_intelligence(keyword: str) -> SEOIntelligence:
+def gather_seo_intelligence(keyword: str, country: str = "") -> SEOIntelligence:
     """
     Main entry point. Returns a fully populated SEOIntelligence object.
     Individual sub-fetches fail gracefully so a missing API key
     doesn't block the whole pipeline.
     """
-    intel = SEOIntelligence(keyword=keyword)
+    intel = SEOIntelligence(
+        keyword=keyword,
+        country=country,
+        location_code=_location_code_for_country(country),
+    )
 
     if not config.DATAFORSEO_LOGIN or not config.DATAFORSEO_PASSWORD:
         intel.errors.append("DATAFORSEO_LOGIN ou DATAFORSEO_PASSWORD manquant dans les secrets")
         intel.keyword_cluster = KeywordCluster(primary=keyword)
         return intel
 
-    logger.info("[SEO] Fetching SERP + PAA for: %s", keyword)
+    logger.info("[SEO] Fetching SERP + PAA for: %s (%s)", keyword, country or "default")
     try:
-        intel.serp_top10, intel.paa_questions = fetch_serp(keyword)
+        intel.serp_top10, intel.paa_questions = fetch_serp(keyword, country=country)
         intel.meta_title_examples = [r.title for r in intel.serp_top10[:3]]
     except Exception as exc:
         msg = f"SERP/PAA : {exc}"
@@ -436,7 +505,7 @@ def gather_seo_intelligence(keyword: str) -> SEOIntelligence:
 
     logger.info("[SEO] Fetching keyword cluster …")
     try:
-        intel.keyword_cluster = fetch_keyword_cluster(keyword)
+        intel.keyword_cluster = fetch_keyword_cluster(keyword, country=country)
     except Exception as exc:
         msg = f"Keyword cluster : {exc}"
         logger.warning(msg)
@@ -466,7 +535,10 @@ def seo_intel_to_brief(intel: SEOIntelligence) -> str:
     cl = intel.keyword_cluster
     lines = [
         f"## SEO Brief — mot-clé cible : {intel.keyword}",
+        f"Marché cible obligatoire : **{intel.country or 'non précisé'}**",
+        f"Location DataForSEO utilisée : `{intel.location_code}`",
         f"Intention de recherche détectée : **{intel.search_intent or 'Informationnel'}**",
+        "Contrainte : n'utiliser que des sources et informations adaptées au marché cible. Ne pas reprendre d'informations propres à un autre pays.",
         "",
     ]
 

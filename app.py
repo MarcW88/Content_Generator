@@ -641,7 +641,7 @@ elif page == "generate":
                         if not config.DATAFORSEO_LOGIN:
                             st.warning("DATAFORSEO_LOGIN manquant — données SEO ignorées")
 
-                        intel     = gather_seo_intelligence(pl["keyword"])
+                        intel     = gather_seo_intelligence(pl["keyword"], country=pl.get("country", ""))
                         seo_brief = seo_intel_to_brief(intel)
 
                         # Affiche les erreurs réelles si présentes
@@ -667,6 +667,10 @@ elif page == "generate":
                         pl["seo_brief"]           = seo_brief
                         if intel.search_intent:
                             st.info(f"Intention de recherche : **{intel.search_intent}**")
+                        if pl["intel_serp_titles"]:
+                            with st.expander(f"Sources utilisées — marché {pl.get('country', '')}", expanded=True):
+                                for i, (title, url) in enumerate(pl["intel_serp_titles"], 1):
+                                    st.markdown(f"{i}. [{title}]({url})")
                         total_kw = len(cl.secondary) + len(cl.lsi) + len(cl.long_tail)
                         detail = f"{total_kw} KW · {len(pl['intel_paa'])} PAA" if total_kw else "partiel"
                         _cost  = 0.0
@@ -829,6 +833,7 @@ elif page == "generate":
                     "secondary_keywords": pl["intel_secondary"],
                     "paa":                pl["intel_paa"],
                     "cannibalisations":   pl["intel_cannib"],
+                    "sources_used":       [{"title": title, "url": url} for title, url in pl.get("intel_serp_titles", [])],
                 },
             }
             json_content = _json.dumps(bundle, ensure_ascii=False, indent=2)
@@ -923,6 +928,10 @@ elif page == "generate":
             with tab_prev:
                 with st.expander("Briefing éditorial", expanded=False):
                     st.markdown(pl["briefing"] or "")
+                if pl.get("intel_serp_titles"):
+                    with st.expander(f"Sources utilisées — marché {pl.get('country', '')}", expanded=True):
+                        for i, (title, url) in enumerate(pl["intel_serp_titles"], 1):
+                            st.markdown(f"{i}. [{title}]({url})")
                 st.markdown(pl["full_article"])
             with tab_html:
                 st.code(html_content, language="html")

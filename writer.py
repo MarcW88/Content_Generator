@@ -240,7 +240,8 @@ Ton rôle :
 
 3. Les sources SERP locales ({country}) figurent dans les données SEO ci-dessous.
    Utilise-les comme références — elles sont réelles, issues du marché cible.
-   Si la liste est vide, identifie toi-même 5 sources pertinentes.
+   Si la liste est vide, signale que les sources locales manquent au lieu d'inventer des sources.
+   N'utilise pas de sources, statistiques, prix, réglementations ou habitudes propres à un autre pays que {country}.
 
 Données SEO disponibles :
 {seo_brief}
@@ -250,6 +251,7 @@ Règles absolues :
 - Pas de majuscule à chaque mot des titres
 - Phrases naturelles et fluides
 - Langue : français, néerlandais ou anglais selon la langue dominante du site
+- Marché : toutes les recommandations doivent être adaptées à {country}, sans extrapolation depuis la France si {country} n'est pas la France
 
 Retourne UNIQUEMENT la partie suivante du briefing (en markdown) :
 ## Contexte & Positionnement
