@@ -339,7 +339,7 @@ def generate_merge_plan(
     try:
         resp = client.messages.create(
             model      = config.CLAUDE_SONNET,
-            max_tokens = 2000,
+            max_tokens = 4000,
             system     = _MERGE_PLAN_SYSTEM,
             messages   = [{"role": "user", "content": prompt}],
         )
