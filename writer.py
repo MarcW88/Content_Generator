@@ -1620,6 +1620,181 @@ Règles strictes :
     return full_article, total_in, total_out
 
 
+# ── Merge-plan rewriter ────────────────────────────────────────────────────────
+
+def rewrite_from_merge_plan(
+    merge_plan: list[dict],
+    existing_content: str,
+    briefing: str,
+    system: str,
+) -> tuple[str, int, int]:
+    """
+    Rewrite the article strictly following a structured merge plan.
+
+    Each plan item has:
+      - heading        : final H2 title
+      - action         : KEEP | EXPAND | REWRITE | INSERT | MOVE
+      - existing_heading: original H2 title in the existing article (or null)
+      - missing_points : list of points to add (for EXPAND/REWRITE)
+      - word_target    : "150-200" word range
+
+    Returns (full_article, total_input_tokens, total_output_tokens).
+    """
+    # ── Clean and split existing content ──────────────────────────────────────
+    try:
+        from content_gap_analyzer import _clean_article_body
+        cleaned = _clean_article_body(existing_content)
+        if cleaned and len(cleaned) > 100:
+            existing_content = cleaned
+    except Exception:
+        pass
+
+    existing_sections = _split_content_by_h2(existing_content)
+    style_rules = extract_style_rules(briefing)
+
+    # Build lookup: normalised_title → text
+    def _norm(s: str) -> str:
+        return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
+
+    section_by_norm: dict[str, str] = {
+        _norm(k): v for k, v in existing_sections.items() if k != "_intro"
+    }
+
+    total_in = total_out = 0
+    final_parts: list[str] = []
+
+    logger.info("[MergePlan] Executing %d-section plan", len(merge_plan))
+
+    for item in merge_plan:
+        action         = (item.get("action") or "INSERT").upper()
+        heading        = item.get("heading", "Section")
+        existing_h     = item.get("existing_heading") or ""
+        missing_points = item.get("missing_points") or []
+        word_target    = item.get("word_target") or "200-300"
+
+        # Find existing section text (try existing_heading first, then heading)
+        existing_text = (
+            section_by_norm.get(_norm(existing_h))
+            or section_by_norm.get(_norm(heading))
+        )
+
+        # ── KEEP / MOVE: output verbatim ──────────────────────────────────────
+        if action in ("KEEP", "MOVE"):
+            if existing_text:
+                # Normalise heading to final title
+                body = re.sub(r'^#{1,3}\s+.+\n', '', existing_text, count=1)
+                final_parts.append(f"## {heading}\n\n{body.strip()}")
+                logger.info("[MergePlan] %s '%s' — verbatim", action, heading)
+            else:
+                logger.warning("[MergePlan] KEEP/MOVE '%s' — no existing text found, generating", heading)
+                action = "INSERT"  # fallthrough to INSERT below
+
+        # ── EXPAND: keep existing + append complementary paragraphs ──────────
+        if action == "EXPAND":
+            if existing_text:
+                body = re.sub(r'^#{1,3}\s+.+\n', '', existing_text, count=1)
+                final_parts.append(f"## {heading}\n\n{body.strip()}")
+                logger.info("[MergePlan] EXPAND '%s' — existing kept", heading)
+                if missing_points:
+                    pts = "\n".join(f"- {p}" for p in missing_points)
+                    prompt = f"""{style_rules}
+
+La section "## {heading}" existe déjà et est conservée telle quelle ci-dessus.
+Rédige UNIQUEMENT 1 à 3 paragraphes COMPLÉMENTAIRES (sans titre H2/H3) à ajouter APRÈS le texte existant.
+
+Points à couvrir :
+{pts}
+
+Règles :
+- Ne répète aucun élément du texte existant.
+- Commence directement par un paragraphe en prose.
+- Mots cibles : {word_target}.
+- Même ton et même style que le texte existant.
+"""
+                    addition, in_t, out_t = _call_claude(system, prompt, max_tokens=600)
+                    addition = _strip_briefing_leakage(addition.strip())
+                    addition = "\n".join(
+                        l for l in addition.splitlines() if not re.match(r'^#{1,3}\s', l)
+                    )
+                    if addition.strip():
+                        final_parts.append(addition.strip())
+                    total_in  += in_t
+                    total_out += out_t
+            else:
+                action = "INSERT"  # no existing text → generate fresh
+
+        # ── REWRITE: generate integrating existing content ────────────────────
+        if action == "REWRITE":
+            pts = "\n".join(f"- {p}" for p in missing_points) or "- Voir briefing."
+            existing_block = ""
+            if existing_text:
+                body = re.sub(r'^#{1,3}\s+.+\n', '', existing_text, count=1).strip()
+                existing_block = f"""
+--- CONTENU EXISTANT À INTÉGRER ---
+{body[:2000]}
+--- FIN ---
+"""
+            max_tokens = min(
+                max(calculate_max_tokens_from_word_estimate(word_target) + 600, 1000),
+                2500,
+            )
+            prompt = f"""{style_rules}
+
+Réécris la section "## {heading}" pour l'article optimisé.
+{existing_block}
+Points supplémentaires à intégrer :
+{pts}
+
+Règles :
+- Commence par "## {heading}".
+- Si du contenu existant est fourni, intègre-le naturellement (verbatim ou reformulé) dans la section.
+- Mots cibles : {word_target}.
+- Termine par une phrase complète.
+"""
+            section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
+            section = _strip_briefing_leakage(section)
+            if not section.lstrip().startswith("#"):
+                section = f"## {heading}\n\n{section}"
+            final_parts.append(section)
+            total_in  += in_t
+            total_out += out_t
+            logger.info("[MergePlan] REWRITE '%s' — %d tokens", heading, in_t + out_t)
+
+        # ── INSERT: generate new section from scratch ─────────────────────────
+        if action == "INSERT":
+            pts = "\n".join(f"- {p}" for p in missing_points) or "- Voir briefing."
+            max_tokens = min(
+                max(calculate_max_tokens_from_word_estimate(word_target) + 600, 1000),
+                2500,
+            )
+            prompt = f"""{style_rules}
+
+Rédige la section "## {heading}" pour un article sur l'éducation canine.
+
+Points obligatoires :
+{pts}
+
+Règles :
+- Commence par "## {heading}".
+- Structure GEO : phrase-réponse directe en premier, puis développe.
+- Mots cibles : {word_target}.
+- Termine par une phrase complète.
+"""
+            section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
+            section = _strip_briefing_leakage(section)
+            if not section.lstrip().startswith("#"):
+                section = f"## {heading}\n\n{section}"
+            final_parts.append(section)
+            total_in  += in_t
+            total_out += out_t
+            logger.info("[MergePlan] INSERT '%s' — %d tokens", heading, in_t + out_t)
+
+    full_article = "\n\n".join(p for p in final_parts if p.strip())
+    logger.info("[MergePlan] Done — %d sections, %d tokens total",
+                len(merge_plan), total_in + total_out)
+    return full_article, total_in, total_out
+
+
 # ── Claude caller ──────────────────────────────────────────────────────────────
 
 def _call_claude(system: str, user_prompt: str,

@@ -18,6 +18,7 @@ from writer import (
     _build_article_system, _build_briefing_system, _build_meta_system, _call_claude,
     BRIEFING_PROMPT, ARTICLE_PROMPT, META_PROMPT,
     generate_chunked_briefing, generate_article_by_sections, rewrite_article_by_sections,
+    rewrite_from_merge_plan,
     ArticleOutput, format_final_output
 )
 
@@ -404,6 +405,7 @@ elif page == "generate":
                 "existing_url":     existing_url.strip(),
                 "gap_analysis":     None,
                 "existing_content": "",
+                "merge_plan":       None,
                 "internal_links_data": internal_links_data,
                 "refresh_style": refresh_style,
                 # outputs
@@ -536,8 +538,44 @@ elif page == "generate":
             elif step_done == 2 and pl["briefing"]:
                 wc = _count_words(pl["briefing"])
                 st.caption(f"{wc} mots")
-                with st.expander("Lire le briefing & plan complet", expanded=True):
+                with st.expander("Lire le briefing & plan complet", expanded=False):
                     st.markdown(pl["briefing"])
+
+                # Show merge plan when in content-gap mode
+                if pl.get("merge_plan"):
+                    st.markdown("---")
+                    st.markdown("### Plan de fusion (Content Merge Plan)")
+                    st.caption(
+                        "Ce plan définit l'action à effectuer sur chaque section avant la rédaction. "
+                        "Valide-le ou redémarre l'étape 2 si tu veux le modifier."
+                    )
+                    _ACTION_ICONS = {
+                        "KEEP":    ("✅", "Conserver verbatim"),
+                        "EXPAND":  ("➕", "Enrichir"),
+                        "REWRITE": ("✏️", "Réécrire"),
+                        "INSERT":  ("📥", "Nouvelle section"),
+                        "MOVE":    ("➡️", "Déplacer"),
+                        "MERGE":   ("🔀", "Fusionner"),
+                    }
+                    for item in pl["merge_plan"]:
+                        action = (item.get("action") or "INSERT").upper()
+                        icon, label = _ACTION_ICONS.get(action, ("🟡", action))
+                        heading = item.get("heading", "?")
+                        ex_h    = item.get("existing_heading") or ""
+                        pts     = item.get("missing_points") or []
+                        wt      = item.get("word_target") or ""
+                        col1, col2 = st.columns([1, 5])
+                        with col1:
+                            st.markdown(f"**{icon} {action}**")
+                        with col2:
+                            st.markdown(f"**{heading}**" +
+                                        (f" ← *{ex_h}*" if ex_h and ex_h != heading else ""))
+                            if pts:
+                                st.caption("Points à couvrir : " + " · ".join(pts[:4]))
+                            if wt:
+                                st.caption(f"📝 {wt} mots")
+                    st.markdown("---")
+
                 st.markdown("**Feedback / adaptations (optionnel)**")
                 feedback = st.text_area(
                     "Instructions pour la rédaction (ex: insister sur tel aspect, changer la tonalité, ajouter une section...)",
@@ -598,7 +636,7 @@ elif page == "generate":
                                 "article_system_prompt", "meta_system_prompt"],
                             1: ["seo_brief", "intel_paa", "intel_secondary", "intel_lsi",
                                 "intel_longtail", "intel_cannib", "intel_intent", "intel_serp_titles"],
-                            2: ["briefing"],
+                            2: ["briefing", "merge_plan"],
                             3: ["full_article", "draft_article"],
                             4: ["meta_title", "meta_description", "geo_check",
                                 "internal_link_suggestions"],
@@ -779,6 +817,35 @@ elif page == "generate":
                             st.write(f"Briefing — {wc} mots (chunked)")
                             detail = f"{wc} mots"
 
+                            # Generate merge plan when optimising an existing page
+                            if pl.get("existing_content") and pl.get("gap_analysis"):
+                                from content_gap_analyzer import (
+                                    generate_merge_plan, ContentGapAnalysis
+                                )
+                                from dataclasses import fields
+                                st.write("Plan de fusion contenu existant → nouveau plan…")
+                                ga = pl["gap_analysis"]
+                                analysis_obj = ContentGapAnalysis(
+                                    existing_url     = ga.get("url", ""),
+                                    existing_content = pl["existing_content"],
+                                    word_count       = ga.get("word_count", 0),
+                                    existing_headings= ga.get("existing_headings", []),
+                                    covered_topics   = ga.get("covered_topics", []),
+                                    missing_topics   = ga.get("missing_topics", []),
+                                    weak_sections    = ga.get("weak_sections", []),
+                                    unanswered_paa   = ga.get("unanswered_paa", []),
+                                    gap_summary      = ga.get("gap_summary", ""),
+                                )
+                                plan = generate_merge_plan(
+                                    existing_content    = pl["existing_content"],
+                                    analysis            = analysis_obj,
+                                    briefing_plan_text  = text,
+                                )
+                                pl["merge_plan"] = plan
+                                n_plan = len(plan)
+                                st.success(f"Plan de fusion : {n_plan} section(s) planifiée(s)")
+                                detail = f"{wc} mots · {n_plan} sections planifiées"
+
                         elif s == 3:  # Article complet
                             if pl.get("article_system_prompt") is None:
                                 pl["article_system_prompt"] = _build_article_system(
@@ -788,12 +855,21 @@ elif page == "generate":
                             feedback_block = f"\n\n--- FEEDBACK UTILISATEUR ---\n{user_feedback}\n--- FIN FEEDBACK ---" if user_feedback else ""
                             briefing_with_feedback = pl["briefing"] + feedback_block
                             if pl.get("existing_content"):
-                                st.write("Mode Content Gap — amélioration du contenu existant…")
-                                text, in_t, out_t = rewrite_article_by_sections(
-                                    existing_content=pl["existing_content"],
-                                    briefing=briefing_with_feedback,
-                                    system=system,
-                                )
+                                if pl.get("merge_plan"):
+                                    st.write("Mode Content Gap — rédaction selon le plan de fusion…")
+                                    text, in_t, out_t = rewrite_from_merge_plan(
+                                        merge_plan       = pl["merge_plan"],
+                                        existing_content = pl["existing_content"],
+                                        briefing         = briefing_with_feedback,
+                                        system           = system,
+                                    )
+                                else:
+                                    st.write("Mode Content Gap — amélioration du contenu existant…")
+                                    text, in_t, out_t = rewrite_article_by_sections(
+                                        existing_content=pl["existing_content"],
+                                        briefing=briefing_with_feedback,
+                                        system=system,
+                                    )
                             else:
                                 text, in_t, out_t = generate_article_by_sections(
                                     briefing=briefing_with_feedback,

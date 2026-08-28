@@ -242,6 +242,120 @@ def _build_gap_brief(analysis: "ContentGapAnalysis") -> str:
     return "\n".join(lines)
 
 
+# ── Merge Plan ─────────────────────────────────────────────────────────────────
+
+_MERGE_PLAN_SYSTEM = """\
+Tu es un architecte de contenu SEO expert en optimisation d'articles existants.
+Ta mission : produire un plan de fusion précis entre le contenu existant et les nouveaux sujets à couvrir.
+Réponds UNIQUEMENT avec un tableau JSON valide, sans markdown, sans commentaires, sans explication.
+"""
+
+_MERGE_PLAN_PROMPT = """\
+Tu dois décider comment fusionner un article existant avec de nouveaux sujets identifiés par l'analyse SEO.
+
+## SECTIONS DE L'ARTICLE EXISTANT
+{existing_sections_summary}
+
+## ANALYSE DES GAPS SEO
+- Résumé : {gap_summary}
+- Sujets manquants : {missing_topics}
+- Sections faibles : {weak_sections}
+- Questions PAA sans réponse : {unanswered_paa}
+
+## PLAN DE RÉDACTION CIBLE (briefing)
+{briefing_plan}
+
+## RÈGLES DE FUSION
+Produis une liste ordonnée de sections représentant l'article FINAL optimal.
+Pour chaque section, attribue une action :
+  - KEEP    : section existante bien couverte, garder verbatim
+  - EXPAND  : section existante faible, garder le texte + ajouter des points manquants
+  - REWRITE : section existante à réécrire en intégrant nouveaux éléments
+  - INSERT  : nouvelle section absente de l'article actuel
+  - MOVE    : section existante à déplacer à cette position
+
+RÈGLES ABSOLUES :
+1. L'ordre des sections doit être logique (général → particulier → complémentaire).
+2. Les sections primaires (apprentissages de base, méthode) ne doivent PAS être interrompues par des sujets secondaires (cours, socialisation avancée, etc.).
+3. Toutes les sections existantes doivent apparaître dans le plan (action KEEP/EXPAND/REWRITE/MOVE).
+4. Les nouvelles sections reçoivent INSERT, placées à la position logique dans le parcours lecteur.
+5. Si deux sections couvrent le même sujet, utilise MERGE (indique existing_heading des deux).
+
+Format JSON requis (tableau d'objets) :
+[
+  {{
+    "position": 1,
+    "heading": "Titre H2 exact de la section dans l'article final",
+    "action": "KEEP|EXPAND|REWRITE|INSERT|MOVE",
+    "existing_heading": "Titre H2 exact dans l'article actuel, ou null si nouvelle section",
+    "missing_points": ["point manquant à ajouter", "autre point"],
+    "word_target": "150-200"
+  }}
+]
+"""
+
+
+def generate_merge_plan(
+    existing_content: str,
+    analysis: "ContentGapAnalysis",
+    briefing_plan_text: str,
+) -> list[dict]:
+    """
+    Generate a structured merge plan deciding what to do with each section.
+
+    Returns an ordered list of section dicts with action, existing_heading,
+    missing_points and word_target. Returns [] if Claude is unavailable.
+    """
+    if not config.ANTHROPIC_API_KEY:
+        logger.warning("[MergePlan] ANTHROPIC_API_KEY missing — skipping")
+        return []
+
+    # Build existing sections summary
+    from writer import _split_content_by_h2  # local import to avoid circular at module level
+    sections = _split_content_by_h2(existing_content)
+
+    existing_summary_lines = []
+    for title, text in sections.items():
+        if title == "_intro":
+            continue
+        word_count = len(text.split())
+        preview = text.replace("\n", " ")[:120].strip()
+        existing_summary_lines.append(
+            f"  [{word_count} mots] ## {title}\n    → {preview}..."
+        )
+    existing_summary = "\n".join(existing_summary_lines) or "Aucune section H2 détectée."
+
+    prompt = _MERGE_PLAN_PROMPT.format(
+        existing_sections_summary = existing_summary,
+        gap_summary    = analysis.gap_summary or "—",
+        missing_topics = ", ".join(analysis.missing_topics[:10]) or "—",
+        weak_sections  = ", ".join(analysis.weak_sections[:8]) or "—",
+        unanswered_paa = ", ".join(analysis.unanswered_paa[:6]) or "—",
+        briefing_plan  = briefing_plan_text[:3000] if briefing_plan_text else "—",
+    )
+
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    try:
+        resp = client.messages.create(
+            model      = config.CLAUDE_OPUS_MODEL,
+            max_tokens = 2000,
+            system     = _MERGE_PLAN_SYSTEM,
+            messages   = [{"role": "user", "content": prompt}],
+        )
+        raw = resp.content[0].text.strip()
+        # Strip optional markdown fences
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        plan: list[dict] = json.loads(raw)
+        logger.info("[MergePlan] Generated %d sections", len(plan))
+        return plan
+    except Exception as exc:
+        logger.error("[MergePlan] Failed: %s", exc)
+        return []
+
+
 # ── Public API ─────────────────────────────────────────────────────────────────
 
 def build_content_gap_analysis(
