@@ -18,7 +18,6 @@ from writer import (
     _build_article_system, _build_briefing_system, _build_meta_system, _call_claude,
     BRIEFING_PROMPT, ARTICLE_PROMPT, META_PROMPT,
     generate_chunked_briefing, generate_article_by_sections, rewrite_article_by_sections,
-    rewrite_from_merge_plan,
     ArticleOutput, format_final_output
 )
 
@@ -857,6 +856,7 @@ elif page == "generate":
                             if pl.get("existing_content"):
                                 if pl.get("merge_plan"):
                                     st.write("Mode Content Gap — rédaction selon le plan de fusion…")
+                                    from writer import rewrite_from_merge_plan
                                     text, in_t, out_t = rewrite_from_merge_plan(
                                         merge_plan       = pl["merge_plan"],
                                         existing_content = pl["existing_content"],
