@@ -1243,24 +1243,68 @@ def _split_content_by_h2(content: str) -> dict[str, str]:
     return sections
 
 
-def _find_matching_section(sections: dict[str, str], target_title: str) -> str | None:
-    """Return existing section text whose title best matches target_title (fuzzy, case-insensitive)."""
+_FR_STOPWORDS = {
+    "le", "la", "les", "de", "du", "des", "un", "une", "et", "en",
+    "a", "au", "aux", "ce", "se", "sa", "son", "ses", "pour", "par",
+    "sur", "que", "qui", "est", "pas", "ne", "il", "elle", "je", "vous",
+    "nous", "dans", "avec", "ou", "mais", "donc", "car", "ni", "si",
+    "tout", "plus", "bien", "peut", "tres", "votre", "mon", "notre",
+    "quels", "quel", "quelles", "quelle", "comment", "quand", "pourquoi",
+    "faire", "avoir", "etre", "comme", "lors", "dun", "dune", "leducation",
+}
+
+
+def _find_matching_section(
+    sections: dict[str, str],
+    target_title: str,
+    block_keywords: list[str] | None = None,
+) -> str | None:
+    """
+    Return existing section text whose title best matches target_title.
+
+    Matching strategy (in order):
+    1. Exact normalised title match.
+    2. Significant-word overlap on titles (≥ 35 %, stopwords excluded).
+    3. Content fallback: existing section's title words appear in block_keywords.
+    """
     def _norm(s: str) -> str:
         return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
 
+    def _sig_words(s: str) -> set[str]:
+        return set(_norm(s).split()) - _FR_STOPWORDS
+
     target_norm = _norm(target_title)
-    # Exact normalised match first
+    target_sig  = _sig_words(target_title)
+
+    # 1 — Exact match
     for title, text in sections.items():
+        if title == "_intro":
+            continue
         if _norm(title) == target_norm:
             return text
-    # Word-overlap fallback (≥ 60 %)
-    target_words = set(target_norm.split())
+
+    # 2 — Significant-word overlap on titles (threshold 35 %)
+    best_score, best_text = 0.0, None
     for title, text in sections.items():
-        existing_words = set(_norm(title).split())
-        if target_words and existing_words:
-            overlap = len(target_words & existing_words) / max(len(target_words), len(existing_words))
-            if overlap >= 0.60:
+        if title == "_intro":
+            continue
+        existing_sig = _sig_words(title)
+        if target_sig and existing_sig:
+            overlap = len(target_sig & existing_sig) / max(len(target_sig), len(existing_sig))
+            if overlap > best_score:
+                best_score, best_text = overlap, text
+    if best_score >= 0.35:
+        return best_text
+
+    # 3 — Content fallback: check if existing section title words appear in block context
+    if block_keywords:
+        context_words = _sig_words(" ".join([target_title] + block_keywords))
+        for title, text in sections.items():
+            if title == "_intro":
+                continue
+            if _sig_words(title) & context_words:
                 return text
+
     return None
 
 
@@ -1316,7 +1360,15 @@ def rewrite_article_by_sections(
     enriched_count = 0
 
     for block in blocks:
-        existing_text = _find_matching_section(existing_sections, block.title)
+        # Build keyword context for content-based matching fallback
+        block_context = (
+            block.must_cover
+            + [c["title"] for c in block.children]
+            + ([block.intent] if block.intent else [])
+        )
+        existing_text = _find_matching_section(
+            existing_sections, block.title, block_keywords=block_context
+        )
 
         if existing_text is not None:
             # ── Existing section: output verbatim ──────────────────────────
