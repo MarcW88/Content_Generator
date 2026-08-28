@@ -313,8 +313,23 @@ Actions disponibles :
   - DELETE  : EXCEPTION RARE — obsolète/doublon/hors-sujet uniquement, jamais pour du contenu marque/produit/conversion, justification obligatoire
   - INSERT  : nouvelle section absente de l'article actuel (uniquement si page_fit ≥ 6)
 
-BIAS FORT : préférer EXPAND à REWRITE. En cas de doute, choisir EXPAND.
-ATTENTION : l’introduction (texte avant le premier H2) est une section à part entière — elle doit figurer dans le plan avec existing_heading "_intro".
+⚠️ PROCESSUS OBLIGATOIRE EN 2 ÉTAPES — respecte cet ordre :
+
+ÉTAPE 1 — INVENTAIRE EXISTANT (priorité absolue) :
+Pour chaque section de l'article existant listée ci-dessus, tu DOIS lui assigner une action dans le plan.
+Utilise le titre original comme "existing_heading" et adapte le "heading" si tu veux un titre plus optimal.
+Ces sections existent déjà et leur texte sera conservé — décide seulement : KEEP, EXPAND, MOVE, MERGE, REWRITE ou DELETE.
+
+ÉTAPE 2 — NOUVEAUX SUJETS (après l'étape 1) :
+Pour chaque sujet manquant du briefing SEO, vérifie D'ABORD s'il chevauche topicalement une section existante.
+  → Si OUI : ajoute ce sujet dans "missing_points" de la section existante avec action EXPAND. PAS de INSERT.
+  → Si NON (sujet vraiment absent) : crée un item INSERT avec existing_heading: null.
+
+INTERDIT : créer un INSERT pour un sujet déjà couvert partiellement ou totalement par une section existante.
+EXEMPLE : si une section existante parle de la méthode de transition alimentaire et qu'un sujet manquant porte sur le protocole jour par jour → ajoute-le comme missing_point dans l'EXPAND de cette section, ne crée pas un INSERT séparé.
+
+BIAS FORT : préférer EXPAND sur une section existante plutôt que INSERT pour un nouveau sujet similaire.
+ATTENTION : l'introduction (texte avant le premier H2) est une section à part entière — elle doit figurer dans le plan avec existing_heading "_intro".
 
 RÈGLES DE PRIORITÉ NARRATIVE (ordonnancement) :
 - narrative_priority 1 (CORE) : répondent directement à l'intention principale de la page → TOUJOURS en premier
@@ -388,14 +403,14 @@ def generate_merge_plan(
         word_count = len(text.split())
         if not text.strip() or word_count < 5:
             continue
-        preview = text.replace("\n", " ")[:120].strip()
+        preview = text.replace("\n", " ")[:300].strip()
         if title == "_intro":
             existing_summary_lines.insert(0,
-                f"  [{word_count} mots] [INTRODUCTION] (avant le premier H2)\n    → {preview}..."
+                f"  [{word_count} mots] [INTRODUCTION] existing_heading='_intro' (avant le premier H2)\n    → {preview}..."
             )
         else:
             existing_summary_lines.append(
-                f"  [{word_count} mots] ## {title}\n    → {preview}..."
+                f"  [{word_count} mots] ## {title}  ← existing_heading='{title}'\n    → {preview}..."
             )
     existing_summary = "\n".join(existing_summary_lines) or "Aucune section détectée."
 
