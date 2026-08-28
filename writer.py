@@ -1665,6 +1665,38 @@ def rewrite_from_merge_plan(
 
     logger.info("[MergePlan] Executing %d-section plan", len(merge_plan))
 
+    # ── Pre-processing: enforce 3 editorial rules ──────────────────────────────
+    # Rule 1 — sort by narrative_priority (fallback: original position order)
+    def _plan_sort_key(item: dict) -> tuple:
+        prio = item.get("narrative_priority") or 2
+        is_concl = 1 if item.get("is_conclusion") else 0
+        pos  = item.get("position") or 999
+        return (is_concl, prio, pos)
+    merge_plan = sorted(merge_plan, key=_plan_sort_key)
+
+    # Rule 2 — filter out suggest_separate_article sections (log recommendations)
+    suggested_separate: list[str] = []
+    filtered_plan: list[dict] = []
+    for item in merge_plan:
+        if item.get("disposition") == "suggest_separate_article" and not item.get("existing_heading"):
+            suggested_separate.append(item.get("heading", "?"))
+        else:
+            filtered_plan.append(item)
+    if suggested_separate:
+        logger.info("[MergePlan] %d section(s) hors-périmètre → article(s) séparé(s) recommandé(s) : %s",
+                    len(suggested_separate), " | ".join(suggested_separate))
+    merge_plan = filtered_plan
+
+    # Rule 3 — conclusion must be REWRITE/MERGE (never KEEP/EXPAND) and placed last
+    conclusion_items = [i for i in merge_plan if i.get("is_conclusion")]
+    non_conclusion   = [i for i in merge_plan if not i.get("is_conclusion")]
+    for item in conclusion_items:
+        if item.get("action", "").upper() in ("KEEP", "EXPAND", "INSERT"):
+            logger.info("[MergePlan] Conclusion '%s' — action forcée REWRITE (was %s)",
+                        item.get("heading"), item.get("action"))
+            item["action"] = "REWRITE"
+    merge_plan = non_conclusion + conclusion_items  # conclusion(s) always last
+
     for item in merge_plan:
         action         = (item.get("action") or "INSERT").upper()
         heading        = item.get("heading", "Section")
@@ -1688,6 +1720,10 @@ def rewrite_from_merge_plan(
             else:
                 logger.warning("[MergePlan] KEEP/MOVE '%s' — no existing text found, generating", heading)
                 action = "INSERT"  # fallthrough to INSERT below
+
+        # ── MERGE: treat like REWRITE (integrate two existing sections) ───────
+        if action == "MERGE":
+            action = "REWRITE"
 
         # ── EXPAND: keep existing + append complementary paragraphs ──────────
         if action == "EXPAND":
@@ -1769,7 +1805,7 @@ Règles :
             )
             prompt = f"""{style_rules}
 
-Rédige la section "## {heading}" pour un article sur l'éducation canine.
+Rédige la section "## {heading}".
 
 Points obligatoires :
 {pts}

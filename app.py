@@ -556,23 +556,42 @@ elif page == "generate":
                         "MOVE":    ("➡️", "Déplacer"),
                         "MERGE":   ("🔀", "Fusionner"),
                     }
-                    for item in pl["merge_plan"]:
+                    _PRIO_LABELS = {1: "CORE", 2: "SUPPORTING", 3: "CONTEXTUAL"}
+                    integrated = [i for i in pl["merge_plan"] if i.get("disposition") != "suggest_separate_article"]
+                    separate   = [i for i in pl["merge_plan"] if i.get("disposition") == "suggest_separate_article"]
+                    for item in integrated:
                         action = (item.get("action") or "INSERT").upper()
                         icon, label = _ACTION_ICONS.get(action, ("🟡", action))
                         heading = item.get("heading", "?")
                         ex_h    = item.get("existing_heading") or ""
                         pts     = item.get("missing_points") or []
                         wt      = item.get("word_target") or ""
+                        prio    = item.get("narrative_priority") or 2
+                        score   = item.get("relevance_score") or ""
+                        is_concl= item.get("is_conclusion", False)
                         col1, col2 = st.columns([1, 5])
                         with col1:
                             st.markdown(f"**{icon} {action}**")
                         with col2:
-                            st.markdown(f"**{heading}**" +
+                            concl_tag = " 🏁" if is_concl else ""
+                            st.markdown(f"**{heading}**{concl_tag}" +
                                         (f" ← *{ex_h}*" if ex_h and ex_h != heading else ""))
-                            if pts:
-                                st.caption("Points à couvrir : " + " · ".join(pts[:4]))
+                            meta_parts = []
+                            if score:
+                                meta_parts.append(f"Score {score}/10")
+                            if prio:
+                                meta_parts.append(_PRIO_LABELS.get(prio, f"P{prio}"))
                             if wt:
-                                st.caption(f"📝 {wt} mots")
+                                meta_parts.append(f"{wt} mots")
+                            if meta_parts:
+                                st.caption(" · ".join(meta_parts))
+                            if pts:
+                                st.caption("Points : " + " · ".join(pts[:4]))
+                    if separate:
+                        st.markdown(f"**💡 {len(separate)} section(s) hors-périmètre — recommandée(s) comme article(s) séparé(s) :**")
+                        for item in separate:
+                            score = item.get("relevance_score", "?")
+                            st.caption(f"• {item.get('heading','?')} (score {score}/10)")
                     st.markdown("---")
 
                 st.markdown("**Feedback / adaptations (optionnel)**")
