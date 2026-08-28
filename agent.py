@@ -23,9 +23,10 @@ import sys
 from datetime import datetime
 
 import config
-from tone_analyzer    import build_style_profile, style_profile_to_system_context
-from seo_intelligence import gather_seo_intelligence, seo_intel_to_brief
-from writer           import run_writing_pipeline, format_final_output
+from tone_analyzer          import build_style_profile, style_profile_to_system_context
+from seo_intelligence       import gather_seo_intelligence, seo_intel_to_brief
+from writer                 import run_writing_pipeline, format_final_output
+from content_gap_analyzer   import build_content_gap_analysis
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -93,10 +94,18 @@ def _save_outputs(keyword: str, article, intel, style_profile: dict) -> dict[str
 
 # ── Main orchestrator ─────────────────────────────────────────────────────────
 
-def run(keyword: str, site_url: str = "", refresh_style: bool = False) -> dict:
+def run(
+    keyword: str,
+    site_url: str = "",
+    refresh_style: bool = False,
+    existing_url: str = "",
+) -> dict:
     """
     Full pipeline. Returns the JSON bundle dict.
     Can be called programmatically (from webhook.py or tests).
+
+    existing_url : if provided, the agent scrapes that page and runs a content
+                   gap analysis before writing, so the output fills the gaps.
     """
     logger.info("═" * 60)
     logger.info("Starting content agent for keyword: %s", keyword)
@@ -122,6 +131,24 @@ def run(keyword: str, site_url: str = "", refresh_style: bool = False) -> dict:
         len(intel.recommended_h2),
         len(intel.cannibalisation_risk),
     )
+
+    # Step 2.5 — Content Gap Analysis (optional, triggered by existing_url)
+    context_doc = ""
+    if existing_url:
+        logger.info("Step 2.5 — Content gap analysis for %s …", existing_url)
+        gap = build_content_gap_analysis(
+            existing_url  = existing_url,
+            serp_top10    = intel.serp_top10,
+            paa_questions = intel.paa_questions,
+            keyword       = keyword,
+        )
+        context_doc = gap.gap_brief
+        logger.info(
+            "[Gap] %d missing topics, %d weak sections",
+            len(gap.missing_topics), len(gap.weak_sections),
+        )
+        # Append gap brief to seo_brief so the legacy writer pipeline sees it
+        seo_brief = seo_brief + "\n\n" + context_doc
 
     # Step 3 — Writing
     logger.info("Step 3/3 — Running 4-pass writing pipeline …")
@@ -161,6 +188,11 @@ def main():
         default=False,
         help="Force le re-scraping du site et la reconstruction du style profile",
     )
+    parser.add_argument(
+        "--existing-url",
+        default="",
+        help="URL d'une page existante à améliorer (active le mode Content Gap)",
+    )
     args = parser.parse_args()
 
     # Basic validation
@@ -174,7 +206,12 @@ def main():
         logger.error("Copy .env.example to .env and fill in the values.")
         sys.exit(1)
 
-    result = run(args.keyword, site_url=config._get("TARGET_SITE_URL",""), refresh_style=args.refresh_style)
+    result = run(
+        args.keyword,
+        site_url     = config._get("TARGET_SITE_URL", ""),
+        refresh_style= args.refresh_style,
+        existing_url = args.existing_url,
+    )
     print(f"\nArticle généré avec succès ({result['word_count']} mots)")
     print(f"Meta title : {result['meta_title']}")
     print(f"Fichiers   : outputs/{_slugify(args.keyword)}_*.md / .json")

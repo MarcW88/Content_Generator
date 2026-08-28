@@ -313,6 +313,13 @@ elif page == "generate":
         with opt2:
             refresh_style = st.checkbox("Forcer rebuild style profile", value=False)
 
+        existing_url = st.text_input(
+            "URL de la page existante à améliorer (optionnel) — mode Content Gap",
+            placeholder="https://www.monsite.com/page-a-ameliorer",
+            key="gen_existing_url",
+            help="Laisse vide pour générer du contenu neuf. Si tu fournis une URL, l'agent scrape cette page, identifie ses lacunes et rédige un contenu qui comble les gaps vs. les concurrents SERP.",
+        )
+
         doc_col, links_col = st.columns(2)
         with doc_col:
             context_file = st.file_uploader(
@@ -394,6 +401,8 @@ elif page == "generate":
                 "lang":          article_lang,
                 "page_type":     page_type,
                 "context_doc":   context_text,
+                "existing_url":  existing_url.strip(),
+                "gap_analysis":  None,
                 "internal_links_data": internal_links_data,
                 "refresh_style": refresh_style,
                 # outputs
@@ -503,6 +512,26 @@ elif page == "generate":
                         st.caption(f"• {q}")
                 if pl["intel_cannib"]:
                     st.warning(f"{len(pl['intel_cannib'])} risque(s) de cannibalisation")
+                if pl.get("gap_analysis"):
+                    ga = pl["gap_analysis"]
+                    st.divider()
+                    st.markdown(f"**🔍 Content Gap —** `{ga['url']}`  ({ga['word_count']} mots existants)")
+                    if ga.get("gap_summary"):
+                        st.caption(ga["gap_summary"])
+                    if ga.get("existing_headings"):
+                        st.markdown("**Structure actuelle :** " + " · ".join(ga["existing_headings"][:6]))
+                    if ga.get("missing_topics"):
+                        with st.expander(f"Sujets manquants ({len(ga['missing_topics'])})", expanded=True):
+                            for t in ga["missing_topics"]:
+                                st.caption(f"• {t}")
+                    if ga.get("weak_sections"):
+                        with st.expander(f"Sections faibles ({len(ga['weak_sections'])})"):
+                            for t in ga["weak_sections"]:
+                                st.caption(f"• {t}")
+                    if ga.get("unanswered_paa"):
+                        with st.expander(f"Questions PAA non répondues ({len(ga['unanswered_paa'])})"):
+                            for q in ga["unanswered_paa"]:
+                                st.caption(f"• {q}")
             elif step_done == 2 and pl["briefing"]:
                 wc = _count_words(pl["briefing"])
                 st.caption(f"{wc} mots")
@@ -581,6 +610,8 @@ elif page == "generate":
                                 pl[field] = None if pl.get(field) and not isinstance(
                                     pl.get(field), list) else [] if isinstance(
                                     pl.get(field), list) else ""
+                        if redo_idx <= 1:
+                            pl["gap_analysis"] = None
                         pl["step"]    = redo_idx
                         pl["waiting"] = False
                         pl["stopped"] = False
@@ -684,7 +715,42 @@ elif page == "generate":
                                 for i, (title, url) in enumerate(pl["intel_serp_titles"], 1):
                                     st.markdown(f"{i}. [{title}]({url})")
                         total_kw = len(cl.secondary) + len(cl.lsi) + len(cl.long_tail)
-                        detail = f"{total_kw} KW · {len(pl['intel_paa'])} PAA" if total_kw else "partiel"
+
+                        # Content Gap Analysis (only when existing_url is set)
+                        if pl.get("existing_url"):
+                            from content_gap_analyzer import build_content_gap_analysis
+                            st.write(f"Analyse content gap — {pl['existing_url']} …")
+                            gap = build_content_gap_analysis(
+                                existing_url  = pl["existing_url"],
+                                serp_top10    = intel.serp_top10,
+                                paa_questions = intel.paa_questions,
+                                keyword       = pl["keyword"],
+                            )
+                            pl["gap_analysis"] = {
+                                "url":              gap.existing_url,
+                                "word_count":       gap.word_count,
+                                "existing_headings":gap.existing_headings,
+                                "covered_topics":   gap.covered_topics,
+                                "missing_topics":   gap.missing_topics,
+                                "weak_sections":    gap.weak_sections,
+                                "unanswered_paa":   gap.unanswered_paa,
+                                "gap_summary":      gap.gap_summary,
+                            }
+                            # Merge gap_brief into context_doc for the briefing step
+                            existing_ctx = pl.get("context_doc") or ""
+                            pl["context_doc"] = (
+                                (existing_ctx + "\n\n" + gap.gap_brief).strip()
+                                if existing_ctx else gap.gap_brief
+                            )
+                            n_gaps = len(gap.missing_topics)
+                            st.success(
+                                f"Content gap : **{n_gaps} sujet(s) manquant(s)** identifié(s) · "
+                                f"{len(gap.weak_sections)} section(s) faible(s) · "
+                                f"~{gap.word_count} mots existants"
+                            )
+                            detail = f"{total_kw} KW · {len(pl['intel_paa'])} PAA · {n_gaps} gaps"
+                        else:
+                            detail = f"{total_kw} KW · {len(pl['intel_paa'])} PAA" if total_kw else "partiel"
                         _cost  = 0.0
 
                     elif s in (2, 3, 4):
