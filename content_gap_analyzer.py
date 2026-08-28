@@ -257,8 +257,14 @@ Par défaut, tout contenu existant doit être conservé verbatim. Les nouvelles 
 - MOVE : déplacer le bloc original sans modification
 - MERGE : conserver le maximum de formulations originales en résolvant la redondance
 - REWRITE : UNIQUEMENT si le passage est factuellement incorrect, obsolète, structurellement incompatible avec le reste, dupliqué ou manifestement de mauvaise qualité. DOIT être justifié dans rewrite_reason.
+- DELETE : UNIQUEMENT si le contenu est : factuellement obsolète | exact doublon | clairement hors-sujet | contenu nuisible. Justification obligatoire dans rewrite_reason. Contenu proprietary/marque/conversion INTERDIT à supprimer.
 
 Ratio cible : pour une optimisation de page existante, les sections KEEP + MOVE + EXPAND doivent représenter ≥ 70% des sections existantes. REWRITE est l'exception, pas la règle.
+
+RÈGLE CRITIQUE : CONTENT PRESERVATION SAFETY
+CHAQUE section existante (y compris l’introduction avant le premier H2) DOIT apparaître dans le plan avec exactement une action.
+Aucune section ne peut être silencieusement ignorée ou absente du plan.
+Le contenu de marque, propriétaire, produit ou conversion DOIT être conservé (KEEP/MOVE/MERGE) même s'il ne couvre pas de gaps SEO.
 
 Cinq lois éditoriales supplémentaires :
 
@@ -303,10 +309,12 @@ Actions disponibles :
   - EXPAND  : section correcte mais incomplète → CONSERVER LE TEXTE ORIGINAL VERBATIM + ajouter des blocs nouveaux avant ou après
   - MOVE    : section bien couverte mais mal placée → déplacer sans modification
   - MERGE   : deux sections qui se chevauchent → conserver le maximum de formulations originales
-  - REWRITE : EXCEPTION UNIQUEMENT si le passage est : factuellement incorrect | obsolète | structurellement dupliqué | manifestement pauvre. Justification obligatoire dans rewrite_reason.
+  - REWRITE : EXCEPTION — justification obligatoire dans rewrite_reason
+  - DELETE  : EXCEPTION RARE — obsolète/doublon/hors-sujet uniquement, jamais pour du contenu marque/produit/conversion, justification obligatoire
   - INSERT  : nouvelle section absente de l'article actuel (uniquement si page_fit ≥ 6)
 
 BIAS FORT : préférer EXPAND à REWRITE. En cas de doute, choisir EXPAND.
+ATTENTION : l’introduction (texte avant le premier H2) est une section à part entière — elle doit figurer dans le plan avec existing_heading "_intro".
 
 RÈGLES DE PRIORITÉ NARRATIVE (ordonnancement) :
 - narrative_priority 1 (CORE) : répondent directement à l'intention principale de la page → TOUJOURS en premier
@@ -326,12 +334,13 @@ RÈGLE PRIMARY INTENT DEPTH :
 - Si une introduction (≤ 150 mots) est nécessaire, elle ne compte pas
 
 RÈGLES ABSOLUES :
-1. Toutes les sections existantes doivent apparaître dans le plan (KEEP/EXPAND/REWRITE/MOVE/MERGE).
+1. Toutes les sections existantes doivent apparaître dans le plan, y compris l’introduction (existing_heading: "_intro").
 2. Si deux sections couvrent le même sujet, utilise MERGE.
 3. La conclusion (is_conclusion: true) doit être la DERNIÈRE section, action REWRITE ou MERGE obligatoirement.
 4. Une seule section is_conclusion autorisée. Aucune section ne peut la suivre.
 5. Commercial : max 2 sections avec commercial_integration "light" + uniquement la conclusion avec "cta".
-6. Pour chaque REWRITE d'une section existante, rewrite_reason est OBLIGATOIRE et non null.
+6. Pour chaque REWRITE ou DELETE d'une section existante, rewrite_reason est OBLIGATOIRE et non null.
+7. L’introduction existante et tout contenu marque/produit/conversion sont à conserver par défaut (KEEP ou EXPAND sauf cas exceptionnel justifié).
 
 Format JSON requis (tableau d'objets) :
 [
@@ -376,14 +385,19 @@ def generate_merge_plan(
 
     existing_summary_lines = []
     for title, text in sections.items():
-        if title == "_intro":
-            continue
         word_count = len(text.split())
+        if not text.strip() or word_count < 5:
+            continue
         preview = text.replace("\n", " ")[:120].strip()
-        existing_summary_lines.append(
-            f"  [{word_count} mots] ## {title}\n    → {preview}..."
-        )
-    existing_summary = "\n".join(existing_summary_lines) or "Aucune section H2 détectée."
+        if title == "_intro":
+            existing_summary_lines.insert(0,
+                f"  [{word_count} mots] [INTRODUCTION] (avant le premier H2)\n    → {preview}..."
+            )
+        else:
+            existing_summary_lines.append(
+                f"  [{word_count} mots] ## {title}\n    → {preview}..."
+            )
+    existing_summary = "\n".join(existing_summary_lines) or "Aucune section détectée."
 
     safe_briefing = (briefing_plan_text[:3000] if briefing_plan_text else "—").replace("{", "{{").replace("}", "}}")
     prompt = _MERGE_PLAN_PROMPT.format(

@@ -895,13 +895,14 @@ elif page == "generate":
                                 if pl.get("merge_plan"):
                                     st.write("Mode Content Gap — rédaction selon le plan de fusion…")
                                     from writer import rewrite_from_merge_plan
-                                    text, in_t, out_t, retention_pct = rewrite_from_merge_plan(
+                                    text, in_t, out_t, retention_pct, coverage_str = rewrite_from_merge_plan(
                                         merge_plan       = pl["merge_plan"],
                                         existing_content = pl["existing_content"],
                                         briefing         = briefing_with_feedback,
                                         system           = system,
                                     )
                                     pl["retention_pct"] = retention_pct
+                                    pl["coverage_str"]  = coverage_str
                                 else:
                                     st.write("Mode Content Gap — amélioration du contenu existant…")
                                     text, in_t, out_t = rewrite_article_by_sections(
@@ -919,11 +920,15 @@ elif page == "generate":
                             wc = _count_words(text)
                             mode_label = "amélioré" if pl.get("existing_content") else "chunked"
                             st.write(f"Article — {wc} mots ({mode_label})")
-                            # Content retention metric
+                            # Content retention + coverage metrics
                             if pl.get("retention_pct") is not None:
                                 ret = pl["retention_pct"]
                                 ret_color = "✅" if ret >= 70 else "⚠️"
-                                st.write(f"{ret_color} Rétention du contenu original : **{ret}%** (cible ≥ 70%)")
+                                cov = pl.get("coverage_str", "")
+                                cov_parts = cov.split("/") if cov else []
+                                cov_ok = len(cov_parts) == 2 and cov_parts[0] == cov_parts[1]
+                                cov_icon = "✅" if cov_ok else "⚠️"
+                                st.write(f"{cov_icon} Couverture sections originales : **{cov}** · {ret_color} Rétention verbatim : **{ret}%** (cible ≥ 70%)")
                             # Promise consistency QA (merge plan mode only)
                             if pl.get("merge_plan"):
                                 from writer import check_promise_consistency

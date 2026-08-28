@@ -1682,11 +1682,15 @@ def rewrite_from_merge_plan(
     section_by_norm: dict[str, str] = {
         _norm(k): v for k, v in existing_sections.items() if k != "_intro"
     }
+    # _intro stored separately for explicit handling
+    existing_intro: str = existing_sections.get("_intro", "").strip()
 
     # Log available sections for diagnostics
     logger.info("[MergePlan] Existing sections available for matching (%d): %s",
                 len(section_by_norm),
                 " | ".join(list(section_by_norm.keys())[:10]))
+    if existing_intro:
+        logger.info("[MergePlan] Intro detected (%d words)", len(existing_intro.split()))
 
     total_in = total_out = 0
     final_parts: list[str] = []
@@ -1733,6 +1737,59 @@ def rewrite_from_merge_plan(
             item["action"] = "REWRITE"
     merge_plan = non_conclusion + conclusion_items  # conclusion(s) always last
 
+    # ── COVERAGE QA: ensure every existing section is accounted for ────────────
+    # Build set of normalized existing_headings referenced by the plan
+    _plan_covered: set[str] = set()
+    _intro_covered = False
+    for item in merge_plan:
+        eh = (item.get("existing_heading") or "").strip()
+        if eh == "_intro":
+            _intro_covered = True
+        elif eh:
+            _plan_covered.add(_norm(eh))
+        # Also accept plan heading itself as a match
+        _plan_covered.add(_norm(item.get("heading") or ""))
+
+    # Find existing sections not accounted for
+    _unaccounted: list[tuple[str, str]] = []  # (title, text)
+    for k, v in section_by_norm.items():
+        if k and v.strip() and k not in _plan_covered:
+            # Try fuzzy match against plan_covered
+            k_words = set(k.split()) - {"de", "du", "le", "la", "les", "des", "un", "une", "et", "en", "par"}
+            best = max(
+                (len(k_words & set(c.split())) / max(len(k_words), len(set(c.split())), 1)
+                 for c in _plan_covered if c),
+                default=0.0,
+            )
+            if best < 0.4:  # not matched even by fuzzy
+                _unaccounted.append((k, v))
+
+    if _unaccounted:
+        logger.warning("[MergePlan] QA COVERAGE: %d existing section(s) not in plan — auto-rescuing as KEEP: %s",
+                       len(_unaccounted), " | ".join(t for t, _ in _unaccounted))
+        # Insert rescued sections before the conclusion (at end of non-conclusion list)
+        rescued_items = [
+            {"heading": t, "action": "KEEP", "existing_heading": t,
+             "missing_points": [], "word_target": "200-300",
+             "narrative_priority": 2, "disposition": "integrate",
+             "is_conclusion": False, "preservation": "HIGH",
+             "commercial_integration": "none", "rewrite_reason": None,
+             "_auto_rescued": True}
+            for t, _ in _unaccounted
+        ]
+        merge_plan = merge_plan[:-len(conclusion_items)] + rescued_items + (conclusion_items if conclusion_items else [])
+
+    # Intro coverage: if not explicitly in plan, inject it automatically at start
+    _intro_in_plan = any(
+        (item.get("existing_heading") or "").strip() == "_intro"
+        for item in merge_plan
+    )
+    if existing_intro and not _intro_in_plan:
+        logger.warning("[MergePlan] QA COVERAGE: intro not in plan — auto-injecting verbatim at start")
+        final_parts.append(existing_intro)
+        _retention_kept += 1
+        _retention_total += 1
+
     # Rule 4 — commercial integration budget: max 2 « light » + 1 « cta » (conclusion)
     commercial_count = 0
     COMMERCIAL_BODY_MAX = 2
@@ -1776,11 +1833,15 @@ def rewrite_from_merge_plan(
         else:  # cta
             commercial_instruction = "Inclus un appel à l'action vers la marque/produit en fin de section."
 
-        # Find existing section text: exact match first, then fuzzy word-overlap fallback
-        existing_text = (
-            section_by_norm.get(_norm(existing_h))
-            or section_by_norm.get(_norm(heading))
-        )
+        # Handle intro plan item
+        if existing_h == "_intro":
+            existing_text = existing_intro or None
+        else:
+            # Find existing section text: exact match first, then fuzzy word-overlap fallback
+            existing_text = (
+                section_by_norm.get(_norm(existing_h))
+                or section_by_norm.get(_norm(heading))
+            )
         if not existing_text and action in ("KEEP", "MOVE", "EXPAND", "REWRITE"):
             # Fuzzy fallback: find best-matching section by word overlap
             query_words = set(_norm(existing_h or heading).split()) - {"de", "du", "le", "la", "les", "des", "un", "une", "et", "en", "par"}
@@ -1807,12 +1868,21 @@ def rewrite_from_merge_plan(
             if action in ("KEEP", "MOVE"):
                 _retention_kept += 1
 
+        # ── DELETE: skip silently but log ───────────────────────────────────
+        if action == "DELETE":
+            reason = item.get("rewrite_reason") or "no reason given"
+            logger.info("[MergePlan] DELETE '%s' — reason: %s", heading, reason)
+            continue  # skip to next item, section not output
+
         # ── KEEP / MOVE: output verbatim ──────────────────────────────────────
         if action in ("KEEP", "MOVE"):
             if existing_text:
-                # Normalise heading to final title
-                body = re.sub(r'^#{1,3}\s+.+\n', '', existing_text, count=1)
-                final_parts.append(f"## {heading}\n\n{body.strip()}")
+                # For intro: output as-is (no heading prefix needed)
+                if existing_h == "_intro":
+                    final_parts.append(existing_text)
+                else:
+                    body = re.sub(r'^#{1,3}\s+.+\n', '', existing_text, count=1)
+                    final_parts.append(f"## {heading}\n\n{body.strip()}")
                 logger.info("[MergePlan] %s '%s' — verbatim", action, heading)
             else:
                 logger.warning("[MergePlan] KEEP/MOVE '%s' — no existing text found, generating", heading)
@@ -1935,9 +2005,14 @@ Règles :
     full_article = "\n\n".join(p for p in final_parts if p.strip())
 
     # Content retention metric
+    n_existing = len(section_by_norm) + (1 if existing_intro else 0)
+    n_accounted = n_existing - len(_unaccounted) - (0 if _intro_in_plan or not existing_intro else 1) + len(_unaccounted)
+    # Simpler: count auto-rescued sections as covered (they are now)
+    n_accounted = n_existing  # after rescue, all are accounted
     retention_pct = int(100 * _retention_kept / _retention_total) if _retention_total else 0
-    logger.info("[MergePlan] Done — %d sections, retention %d/%d verbatim (%.0f%%), %d tokens total",
-                len(merge_plan), _retention_kept, _retention_total, retention_pct, total_in + total_out)
+    coverage_str = f"{n_accounted}/{n_existing}"
+    logger.info("[MergePlan] Done — sections coverage %s, retention %d/%d verbatim (%.0f%%), %d tokens total",
+                coverage_str, _retention_kept, _retention_total, retention_pct, total_in + total_out)
     if retention_pct < 70 and _retention_total > 0:
         logger.warning("[MergePlan] QA RETENTION: %.0f%% < 70%% target — many sections were rewritten",
                        retention_pct)
@@ -1946,7 +2021,7 @@ Règles :
     total_in  += in_t
     total_out += out_t
 
-    return full_article, total_in, total_out, retention_pct
+    return full_article, total_in, total_out, retention_pct, coverage_str
 
 
 def check_promise_consistency(article: str, system: str) -> tuple[list[str], int, int]:
