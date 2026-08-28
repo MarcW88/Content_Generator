@@ -337,7 +337,7 @@ def generate_merge_plan(
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     try:
         resp = client.messages.create(
-            model      = config.CLAUDE_OPUS,
+            model      = config.CLAUDE_SONNET,
             max_tokens = 2000,
             system     = _MERGE_PLAN_SYSTEM,
             messages   = [{"role": "user", "content": prompt}],

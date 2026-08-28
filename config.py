@@ -34,7 +34,7 @@ GSC_SITE_URL         = _get("GSC_SITE_URL")
 STYLE_PROFILE_CACHE_DIR = "style_profiles"
 
 # ── Claude models ──────────────────────────────────────────────────────────────
-CLAUDE_SONNET = "claude-sonnet-4-5"
+CLAUDE_SONNET = "claude-sonnet-4-6"
 CLAUDE_OPUS   = "claude-opus-4-5"
 
 # ── Scraping ───────────────────────────────────────────────────────────────────
