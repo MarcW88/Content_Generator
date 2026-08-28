@@ -249,10 +249,19 @@ Tu es un architecte de contenu SEO expert en optimisation d'articles existants.
 Ta mission : produire un plan de fusion précis entre le contenu existant et les nouveaux sujets à couvrir.
 Réponds UNIQUEMENT avec un tableau JSON valide, sans markdown, sans commentaires, sans explication.
 
-Trois lois éditoriales absolues :
-1. PRIMARY INTENT FIRST — les sections qui répondent directement à l'intention principale de la page (narrative_priority 1) doivent précéder les sections connexes (2) et les sections PAA/tangentielles (3). Un gap SEO ne peut jamais repousser la réponse à l'intention principale.
-2. GAP FILTERING — chaque gap reçoit un relevance_score 1-10 mesurant sa pertinence pour CETTE PAGE (pas pour le sujet en général). Score < 6 → disposition "suggest_separate_article" : le contenu sera recommandé comme article séparé, il ne doit PAS être intégré ici.
-3. CONCLUSION UNIQUE — la section de conclusion ou d'appel à l'action finale est marquée is_conclusion: true. Son action est obligatoirement REWRITE ou MERGE (jamais KEEP, EXPAND ou INSERT). Elle doit être la DERNIÈRE section du plan. Aucune section ne peut la suivre.
+Quatre lois éditoriales absolues :
+
+1. PRIMARY INTENT DEPTH — L'article doit commencer à répondre à l'intention principale dans les premières 20-25% du contenu. Les sections narrative_priority 1 (CORE) ne peuvent pas être précédées par plus de 1-2 sections contextuelles/PAA. Les PAA et sujets secondaires ne peuvent pas retarder la réponse pratique.
+
+2. PAGE FIT FILTER — Chaque section reçoit deux scores indépendants :
+   - topical_relevance (1-10) : le sujet est-il en rapport avec le domaine de la page ?
+   - page_fit (1-10) : est-ce le MEILLEUR endroit pour traiter ce sujet sur ce site ?
+   Un sujet peut avoir topical_relevance=9 et page_fit=4 (devrait être un article séparé).
+   Si page_fit < 6 → disposition "suggest_separate_article". Ne pas intégrer, recommander un internal link.
+
+3. COMMERCIAL INTEGRATION BUDGET — La marque/produit du site (ex. Dog Chef, la boutique, l'offre) ne peut apparaître que : MAX 2 mentions contextuelles dans le corps + 1 CTA en conclusion. Ne pas forcer la marque dans des sections où le lien est artificiel. Indique dans commercial_integration: "none", "light", ou "cta".
+
+4. CONCLUSION UNIQUE — La conclusion (is_conclusion: true) doit être la DERNIÈRE section. Action obligatoirement REWRITE ou MERGE. Une seule section is_conclusion autorisée.
 """
 
 _MERGE_PLAN_PROMPT = """\
@@ -276,7 +285,7 @@ Pour chaque section, attribue une action :
   - KEEP    : section existante bien couverte, garder verbatim
   - EXPAND  : section existante faible, garder le texte + ajouter des points manquants
   - REWRITE : section existante à réécrire en intégrant nouveaux éléments (OBLIGATOIRE pour la conclusion)
-  - INSERT  : nouvelle section absente de l'article actuel (uniquement si relevance_score ≥ 6)
+  - INSERT  : nouvelle section absente de l'article actuel (uniquement si page_fit ≥ 6)
   - MOVE    : section existante à déplacer à cette position
   - MERGE   : fusionner deux sections existantes en une seule
 
@@ -286,18 +295,23 @@ RÈGLES DE PRIORITÉ NARRATIVE (ordonnancement) :
 - narrative_priority 3 (CONTEXTUAL) : PAA tangentielles, sujets connexes → après les sections SUPPORTING
 - Les sections de même priorité suivent une logique pédagogique (général → particulier)
 
-RÈGLES DE PERTINENCE (relevance_score) :
-- Score 1-10 : dans quelle mesure cette section répond-elle à l'intention déclarée de CETTE PAGE ?
-- Score ≥ 6 → disposition "integrate" : inclure dans cet article
-- Score < 6 → disposition "suggest_separate_article" : ne PAS intégrer ici, recommander un contenu séparé
-- Les sections existantes (KEEP/EXPAND/REWRITE/MOVE) héritent au minimum d'un score de 5
+RÈGLES DE PAGE FIT (double scoring) :
+- topical_relevance 1-10 : le sujet appartient-il au domaine de la page ?
+- page_fit 1-10 : cette page est-elle LE MEILLEUR endroit pour traiter ce sujet ?
+- Si page_fit < 6 → disposition "suggest_separate_article" (même si topical_relevance est élevé)
+- Les sections existantes héritent automatiquement d'un page_fit minimum de 5
+
+RÈGLE PRIMARY INTENT DEPTH :
+- Compter le nombre de sections avant la première section narrative_priority 1
+- Ce nombre ne doit pas dépasser 2
+- Si une introduction (≤ 150 mots) est nécessaire, elle ne compte pas
 
 RÈGLES ABSOLUES :
 1. Toutes les sections existantes doivent apparaître dans le plan (KEEP/EXPAND/REWRITE/MOVE/MERGE).
 2. Si deux sections couvrent le même sujet, utilise MERGE.
 3. La conclusion (is_conclusion: true) doit être la DERNIÈRE section, action REWRITE ou MERGE obligatoirement.
-4. Aucune section ne peut apparaître après is_conclusion: true.
-5. Il ne peut y avoir qu'UNE seule section is_conclusion: true.
+4. Une seule section is_conclusion autorisée. Aucune section ne peut la suivre.
+5. Commercial : max 2 sections avec commercial_integration "light" + uniquement la conclusion avec "cta".
 
 Format JSON requis (tableau d'objets) :
 [
@@ -309,9 +323,11 @@ Format JSON requis (tableau d'objets) :
     "missing_points": ["point manquant à ajouter", "autre point"],
     "word_target": "150-200",
     "narrative_priority": 1,
-    "relevance_score": 9,
+    "topical_relevance": 9,
+    "page_fit": 8,
     "disposition": "integrate",
-    "is_conclusion": false
+    "is_conclusion": false,
+    "commercial_integration": "none"
   }}
 ]
 """

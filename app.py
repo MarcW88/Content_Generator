@@ -567,18 +567,23 @@ elif page == "generate":
                         pts     = item.get("missing_points") or []
                         wt      = item.get("word_target") or ""
                         prio    = item.get("narrative_priority") or 2
-                        score   = item.get("relevance_score") or ""
+                        trel    = item.get("topical_relevance") or item.get("relevance_score") or ""
+                        pfit    = item.get("page_fit") or ""
+                        comm    = (item.get("commercial_integration") or "none").lower()
                         is_concl= item.get("is_conclusion", False)
                         col1, col2 = st.columns([1, 5])
                         with col1:
                             st.markdown(f"**{icon} {action}**")
                         with col2:
                             concl_tag = " 🏁" if is_concl else ""
-                            st.markdown(f"**{heading}**{concl_tag}" +
+                            comm_tag  = " 💰" if comm in ("light", "cta") else ""
+                            st.markdown(f"**{heading}**{concl_tag}{comm_tag}" +
                                         (f" ← *{ex_h}*" if ex_h and ex_h != heading else ""))
                             meta_parts = []
-                            if score:
-                                meta_parts.append(f"Score {score}/10")
+                            if trel:
+                                meta_parts.append(f"Topic {trel}/10")
+                            if pfit:
+                                meta_parts.append(f"Fit {pfit}/10")
                             if prio:
                                 meta_parts.append(_PRIO_LABELS.get(prio, f"P{prio}"))
                             if wt:
@@ -906,6 +911,15 @@ elif page == "generate":
                             wc = _count_words(text)
                             mode_label = "amélioré" if pl.get("existing_content") else "chunked"
                             st.write(f"Article — {wc} mots ({mode_label})")
+                            # Promise consistency QA (merge plan mode only)
+                            if pl.get("merge_plan"):
+                                from writer import check_promise_consistency
+                                qa_issues, _, _ = check_promise_consistency(text, system)
+                                if qa_issues:
+                                    for issue in qa_issues:
+                                        st.warning(f"⚠️ QA Promesse : {issue}")
+                                else:
+                                    st.success("✅ QA Promesse : cohérence des annonces vérifiée")
                             detail = f"{wc} mots"
 
                         elif s == 4:  # Métas + révision

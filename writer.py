@@ -1674,11 +1674,17 @@ def rewrite_from_merge_plan(
         return (is_concl, prio, pos)
     merge_plan = sorted(merge_plan, key=_plan_sort_key)
 
-    # Rule 2 — filter out suggest_separate_article sections (log recommendations)
+    # Rule 2 — filter out suggest_separate_article / low page_fit sections (log recommendations)
     suggested_separate: list[str] = []
     filtered_plan: list[dict] = []
     for item in merge_plan:
-        if item.get("disposition") == "suggest_separate_article" and not item.get("existing_heading"):
+        is_existing = bool(item.get("existing_heading"))
+        page_fit    = item.get("page_fit") or item.get("relevance_score") or 7  # BC compat
+        is_out_of_scope = (
+            item.get("disposition") == "suggest_separate_article"
+            or (not is_existing and page_fit < 6)
+        )
+        if is_out_of_scope and not is_existing:
             suggested_separate.append(item.get("heading", "?"))
         else:
             filtered_plan.append(item)
@@ -1697,12 +1703,48 @@ def rewrite_from_merge_plan(
             item["action"] = "REWRITE"
     merge_plan = non_conclusion + conclusion_items  # conclusion(s) always last
 
+    # Rule 4 — commercial integration budget: max 2 « light » + 1 « cta » (conclusion)
+    commercial_count = 0
+    COMMERCIAL_BODY_MAX = 2
+    for item in merge_plan:
+        comm = (item.get("commercial_integration") or "none").lower()
+        if comm == "cta" and not item.get("is_conclusion"):
+            item["commercial_integration"] = "none"  # CTA only allowed in conclusion
+        elif comm == "light":
+            if commercial_count >= COMMERCIAL_BODY_MAX:
+                item["commercial_integration"] = "none"
+            else:
+                commercial_count += 1
+    logger.info("[MergePlan] Commercial budget: %d/%d body mentions allocated",
+                commercial_count, COMMERCIAL_BODY_MAX)
+
+    # QA check: PRIMARY INTENT DEPTH — warn if >2 non-intro sections before first CORE (prio 1)
+    sections_before_core = 0
+    for item in non_conclusion:
+        prio = item.get("narrative_priority") or 2
+        wt   = item.get("word_target") or ""
+        is_intro = (prio == 1 and any(w in item.get("heading", "").lower() for w in ("intro", "pourquoi", "présentation")))
+        if prio == 1 and not is_intro:
+            break
+        if not is_intro:
+            sections_before_core += 1
+    if sections_before_core > 2:
+        logger.warning("[MergePlan] QA PRIMARY INTENT DEPTH: %d sections avant la première section CORE (max recommandé : 2)",
+                       sections_before_core)
+
     for item in merge_plan:
         action         = (item.get("action") or "INSERT").upper()
         heading        = item.get("heading", "Section")
         existing_h     = item.get("existing_heading") or ""
         missing_points = item.get("missing_points") or []
         word_target    = item.get("word_target") or "200-300"
+        comm_flag      = (item.get("commercial_integration") or "none").lower()
+        if comm_flag == "none":
+            commercial_instruction = "Ne mentionne PAS la marque ou le produit dans cette section."
+        elif comm_flag == "light":
+            commercial_instruction = "Tu peux faire UNE mention contextuelle et naturelle de la marque/produit si le lien est évident, sinon omets-la."
+        else:  # cta
+            commercial_instruction = "Inclus un appel à l'action vers la marque/produit en fin de section."
 
         # Find existing section text (try existing_heading first, then heading)
         existing_text = (
@@ -1746,6 +1788,7 @@ Règles :
 - Commence directement par un paragraphe en prose.
 - Mots cibles : {word_target}.
 - Même ton et même style que le texte existant.
+- {commercial_instruction}
 """
                     addition, in_t, out_t = _call_claude(system, prompt, max_tokens=600)
                     addition = _strip_briefing_leakage(addition.strip())
@@ -1785,6 +1828,7 @@ Règles :
 - Commence par "## {heading}".
 - Si du contenu existant est fourni, intègre-le naturellement (verbatim ou reformulé) dans la section.
 - Mots cibles : {word_target}.
+- {commercial_instruction}
 - Termine par une phrase complète.
 """
             section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
@@ -1814,6 +1858,7 @@ Règles :
 - Commence par "## {heading}".
 - Structure GEO : phrase-réponse directe en premier, puis développe.
 - Mots cibles : {word_target}.
+- {commercial_instruction}
 - Termine par une phrase complète.
 """
             section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
@@ -1828,10 +1873,70 @@ Règles :
     full_article = "\n\n".join(p for p in final_parts if p.strip())
     logger.info("[MergePlan] Done — %d sections, %d tokens total",
                 len(merge_plan), total_in + total_out)
+    
+    issues, in_t, out_t = check_promise_consistency(full_article, system)
+    total_in  += in_t
+    total_out += out_t
+    
     return full_article, total_in, total_out
 
 
-# ── Claude caller ──────────────────────────────────────────────────────────────
+def check_promise_consistency(article: str, system: str) -> tuple[list[str], int, int]:
+    """
+    QA pass: find enumerated promises in the intro (e.g. 'les 6 ordres à apprendre')
+    and verify each promised item is actually covered in the article body.
+
+    Returns (issues_list, input_tokens, output_tokens).
+    issues_list is empty if no problems found.
+    """
+    prompt = f"""Lis cet article et effectue un audit de cohérence des promesses.
+
+ÉTAPE 1 — Identifie toutes les promesses énumératives dans l'introduction ou le corps :
+- listes numérotées annoncées ("les 5 erreurs", "6 ordres essentiels", "3 étapes", etc.)
+- toute formule du type "nous allons voir X points / Y techniques / Z sujets"
+
+ÉTAPE 2 — Pour chaque promesse, vérifie :
+a) Chaque élément annoncé est-il réellement traité ?
+b) Le nombre annoncé correspond-il au nombre réellement livré ?
+c) L'ordre annoncé est-il respecté ?
+
+Réponds UNIQUEMENT avec un tableau JSON :
+[
+  {{
+    "promise": "description de la promesse",
+    "announced": ["élément 1", "élément 2"],
+    "missing": ["éléments manquants ou non trouvés"],
+    "count_announced": 6,
+    "count_delivered": 5,
+    "issue": "description du problème ou null si OK"
+  }}
+]
+
+Si aucune promesse énumérative n'est détectée, réponds avec [].
+
+ARTICLE :
+{article[:6000]}
+"""
+    try:
+        raw, in_t, out_t = _call_claude(system, prompt, max_tokens=800)
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        results = json.loads(raw.strip())
+        issues = [r["issue"] for r in results if r.get("issue")]
+        if issues:
+            logger.warning("[QA:PromiseConsistency] %d issue(s) detected: %s",
+                           len(issues), " | ".join(issues))
+        else:
+            logger.info("[QA:PromiseConsistency] No promise consistency issues detected")
+        return issues, in_t, out_t
+    except Exception as exc:
+        logger.error("[QA:PromiseConsistency] Failed: %s", exc)
+        return [], 0, 0
+
+
+# ── Claude caller ───────────────────────────────────────────────────────────────
 
 def _call_claude(system: str, user_prompt: str,
                  max_tokens: int | None = None) -> tuple[str, int, int]:
