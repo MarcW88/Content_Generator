@@ -1225,22 +1225,45 @@ Retourne UNIQUEMENT ce bloc H2 complet en markdown.
 # ── Content Gap rewrite helpers ────────────────────────────────────────────────
 
 def _split_content_by_h2(content: str) -> dict[str, str]:
-    """Split markdown content into {h2_title: full_section_text} dict."""
-    sections: dict[str, str] = {}
-    current_title = "_intro"
-    current_lines: list[str] = []
-    for line in content.split("\n"):
-        m = re.match(r'^##\s+(.+)$', line.strip())
-        if m:
-            if current_lines:
+    """
+    Split markdown content into {heading_title: section_text} dict.
+
+    Tries heading levels in order:
+      1. H2/H3 (## / ###)
+      2. Any heading (# / ## / ###)  — fallback for pages where sections are H1
+    Returns at minimum {"_intro": full_content} so callers always get something.
+    """
+    def _do_split(pattern: str) -> dict[str, str]:
+        sections: dict[str, str] = {}
+        current_title = "_intro"
+        current_lines: list[str] = []
+        for line in content.split("\n"):
+            m = re.match(pattern, line.strip())
+            if m:
                 sections[current_title] = "\n".join(current_lines).strip()
-            current_title = m.group(1).strip()
-            current_lines = [line]
-        else:
-            current_lines.append(line)
-    if current_lines:
-        sections[current_title] = "\n".join(current_lines).strip()
-    return sections
+                current_title = m.group(1).strip()
+                current_lines = [line]
+            else:
+                current_lines.append(line)
+        if current_lines:
+            sections[current_title] = "\n".join(current_lines).strip()
+        return sections
+
+    def _real_section_count(d: dict) -> int:
+        return sum(1 for k in d if k != "_intro" and d[k].strip())
+
+    # Pass 1 — H2 / H3
+    result = _do_split(r"^#{2,3}\s+(.+)$")
+    if _real_section_count(result) > 0:
+        return result
+
+    # Pass 2 — any heading level (H1 fallback)
+    result = _do_split(r"^#{1,3}\s+(.+)$")
+    if _real_section_count(result) > 0:
+        return result
+
+    # No headings at all — return full content as _intro
+    return {"_intro": content.strip()}
 
 
 _FR_STOPWORDS = {
@@ -1343,24 +1366,42 @@ def rewrite_article_by_sections(
     style_rules = extract_style_rules(briefing)
     existing_sections = _split_content_by_h2(existing_content)
     blocks = extract_article_blocks(briefing)
-    logger.info("[Rewrite] %d existing H2 sections, %d planned blocks",
-                len(existing_sections), len(blocks))
+
+    real_section_count = sum(1 for k in existing_sections if k != "_intro" and existing_sections[k].strip())
+    logger.info("[Rewrite] %d real H2 sections detected, %d planned blocks",
+                real_section_count, len(blocks))
+
+    # ── Paragraph-injection mode when no headings were detected ───────────────
+    # The scraper returned plain text with no ## markers → split into paragraphs
+    # and inject relevant ones into each briefing block prompt.
+    para_mode = real_section_count == 0
+    existing_paragraphs: list[str] = []
+    if para_mode:
+        logger.info("[Rewrite] No headings detected — switching to paragraph-injection mode")
+        raw_text = existing_sections.get("_intro", existing_content)
+        existing_paragraphs = [
+            p.strip() for p in re.split(r"\n{2,}", raw_text) if len(p.strip()) > 60
+        ]
+        logger.info("[Rewrite] %d usable paragraphs extracted from existing content",
+                    len(existing_paragraphs))
 
     total_in = total_out = 0
     final_parts: list[str] = []
-    handled_existing: set[str] = set()  # titles of existing sections already output
+    handled_existing: set[str] = set()
 
-    # ── Always output intro verbatim first ────────────────────────────────────
-    if "_intro" in existing_sections and existing_sections["_intro"].strip():
+    # ── Section-split mode: output intro first ────────────────────────────────
+    if not para_mode and "_intro" in existing_sections and existing_sections["_intro"].strip():
         final_parts.append(existing_sections["_intro"])
         handled_existing.add("_intro")
 
     if not blocks:
-        # No plan extracted — keep full existing content and append gap enrichment
-        logger.warning("[Rewrite] No blocks found — keeping existing content + gap context")
-        remaining = "\n\n".join(
-            text for title, text in existing_sections.items() if title != "_intro"
-        )
+        logger.warning("[Rewrite] No blocks found — keeping existing content")
+        if not para_mode:
+            remaining = "\n\n".join(
+                text for title, text in existing_sections.items() if title != "_intro"
+            )
+        else:
+            remaining = existing_content
         if remaining.strip():
             final_parts.append(remaining)
         full_article = "\n\n".join(p for p in final_parts if p.strip())
@@ -1371,6 +1412,90 @@ def rewrite_article_by_sections(
     enriched_count = 0
 
     for block in blocks:
+        # ── Paragraph-injection mode (no headings detected) ───────────────────
+        if para_mode:
+            block_kw = set(
+                re.sub(r"[^a-z0-9 ]", "", (
+                    block.title + " " + " ".join(block.must_cover) + " "
+                    + " ".join(c["title"] for c in block.children)
+                ).lower()).split()
+            ) - _FR_STOPWORDS
+
+            relevant_paras = [
+                p for p in existing_paragraphs
+                if any(w in re.sub(r"[^a-z0-9 ]", "", p.lower()) for w in block_kw)
+            ][:4]  # max 4 paragraphs per block
+
+            child_specs   = [f"- ### {c['title']}" for c in block.children]
+            children_block = "\n".join(child_specs) if child_specs else "Aucun H3 imposé."
+            must_cover    = "\n".join(f"- {item}" for item in block.must_cover) or "- Voir briefing."
+            min_w, max_w  = _parse_word_estimate_bounds(block.word_estimate, 250, 380)
+            for child in block.children:
+                cm, cx = _parse_word_estimate_bounds(child.get("word_estimate", ""), 100, 160)
+                min_w += cm; max_w += cx
+            target_words  = f"{min_w}-{max_w}"
+            max_tokens    = min(max(calculate_max_tokens_from_word_estimate(target_words) + 700, 1200), 3000)
+
+            if relevant_paras:
+                existing_block = "\n\n".join(relevant_paras)
+                logger.info("[Rewrite][para] '%s' — %d relevant paragraphs found", block.title, len(relevant_paras))
+                prompt = f"""{style_rules}
+
+Tu rédiges la section "## {block.title}" d'un article existant en cours d'optimisation.
+
+--- PARAGRAPHES EXISTANTS À CONSERVER DANS CETTE SECTION ---
+{existing_block}
+--- FIN DES PARAGRAPHES EXISTANTS ---
+
+Ces paragraphes doivent apparaître TELS QUELS dans ta réponse (ne les modifie pas).
+Tu peux les réorganiser si nécessaire et ajouter du contenu complémentaire autour d'eux.
+
+Points supplémentaires à couvrir :
+{must_cover}
+
+Sous-sections H3 à inclure :
+{children_block}
+
+Mots cibles : {target_words}
+
+Règles strictes :
+- Commence par "## {block.title}".
+- Les paragraphes existants doivent être présents verbatim dans ta réponse.
+- Ajoute du contenu nouveau AUTOUR des paragraphes existants pour atteindre le volume cible.
+- Termine par une phrase complète.
+"""
+            else:
+                logger.info("[Rewrite][para] '%s' — no relevant paragraphs, generating fresh", block.title)
+                prompt = f"""{style_rules}
+
+NOUVELLE section à créer :
+## {block.title}
+Intention : {block.intent or "répondre clairement à l'intention"}
+Mots cibles : {target_words}
+
+Sous-sections H3 :
+{children_block}
+
+Points obligatoires :
+{must_cover}
+
+Règles strictes :
+- Commence par "## {block.title}".
+- Structure GEO : phrase-réponse directe, puis développe.
+- Retourne UNIQUEMENT ce bloc H2 en markdown. Termine par une phrase complète.
+"""
+
+            section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
+            section = _strip_briefing_leakage(section)
+            if not section.lstrip().startswith("##"):
+                section = f"## {block.title}\n\n{section}"
+            final_parts.append(section)
+            total_in  += in_t
+            total_out += out_t
+            new_sections_count += 1
+            continue
+
+        # ── Section-split mode ────────────────────────────────────────────────
         # Build keyword context for content-based matching fallback
         block_context = (
             block.must_cover
