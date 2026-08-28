@@ -249,7 +249,18 @@ Tu es un architecte de contenu SEO expert en optimisation d'articles existants.
 Ta mission : produire un plan de fusion précis entre le contenu existant et les nouveaux sujets à couvrir.
 Réponds UNIQUEMENT avec un tableau JSON valide, sans markdown, sans commentaires, sans explication.
 
-Quatre lois éditoriales absolues :
+LOI FONDAMENTALE : PRESERVATION FIRST
+L'optimisation d'un article existant N'EST PAS une réécriture. Le texte original est le DOCUMENT SOURCE, pas une référence informationnelle.
+Par défaut, tout contenu existant doit être conservé verbatim. Les nouvelles informations SEO s'ajoutent AUTOUR du texte existant, elles ne le remplacent pas.
+- KEEP : conserver verbatim, aucune modification
+- EXPAND : conserver le texte original verbatim + ajouter de nouveaux éléments autour (avant ou après)
+- MOVE : déplacer le bloc original sans modification
+- MERGE : conserver le maximum de formulations originales en résolvant la redondance
+- REWRITE : UNIQUEMENT si le passage est factuellement incorrect, obsolète, structurellement incompatible avec le reste, dupliqué ou manifestement de mauvaise qualité. DOIT être justifié dans rewrite_reason.
+
+Ratio cible : pour une optimisation de page existante, les sections KEEP + MOVE + EXPAND doivent représenter ≥ 70% des sections existantes. REWRITE est l'exception, pas la règle.
+
+Cinq lois éditoriales supplémentaires :
 
 1. PRIMARY INTENT DEPTH — L'article doit commencer à répondre à l'intention principale dans les premières 20-25% du contenu. Les sections narrative_priority 1 (CORE) ne peuvent pas être précédées par plus de 1-2 sections contextuelles/PAA. Les PAA et sujets secondaires ne peuvent pas retarder la réponse pratique.
 
@@ -262,6 +273,10 @@ Quatre lois éditoriales absolues :
 3. COMMERCIAL INTEGRATION BUDGET — La marque/produit du site (ex. Dog Chef, la boutique, l'offre) ne peut apparaître que : MAX 2 mentions contextuelles dans le corps + 1 CTA en conclusion. Ne pas forcer la marque dans des sections où le lien est artificiel. Indique dans commercial_integration: "none", "light", ou "cta".
 
 4. CONCLUSION UNIQUE — La conclusion (is_conclusion: true) doit être la DERNIÈRE section. Action obligatoirement REWRITE ou MERGE. Une seule section is_conclusion autorisée.
+
+5. PRESERVATION SCORING — Pour chaque section existante (action != INSERT), indique :
+   - preservation: "HIGH" (KEEP/MOVE), "MEDIUM" (EXPAND/MERGE), "LOW" (REWRITE avec justification)
+   - rewrite_reason: null si preservation HIGH ou MEDIUM, sinon la raison précise obligatoire
 """
 
 _MERGE_PLAN_PROMPT = """\
@@ -279,15 +294,19 @@ Tu dois décider comment fusionner un article existant avec de nouveaux sujets i
 ## PLAN DE RÉDACTION CIBLE (briefing)
 {briefing_plan}
 
-## RÈGLES DE FUSION
+## RÈGLES DE FUSION — PRESERVATION FIRST
 Produis une liste ordonnée de sections représentant l'article FINAL optimal.
-Pour chaque section, attribue une action :
-  - KEEP    : section existante bien couverte, garder verbatim
-  - EXPAND  : section existante faible, garder le texte + ajouter des points manquants
-  - REWRITE : section existante à réécrire en intégrant nouveaux éléments (OBLIGATOIRE pour la conclusion)
+PRINCIPE : le texte original est la source. Les nouvelles informations s'ajoutent autour, elles ne remplacent pas.
+
+Actions disponibles :
+  - KEEP    : section bien couverte → conserver verbatim, aucune modification
+  - EXPAND  : section correcte mais incomplète → CONSERVER LE TEXTE ORIGINAL VERBATIM + ajouter des blocs nouveaux avant ou après
+  - MOVE    : section bien couverte mais mal placée → déplacer sans modification
+  - MERGE   : deux sections qui se chevauchent → conserver le maximum de formulations originales
+  - REWRITE : EXCEPTION UNIQUEMENT si le passage est : factuellement incorrect | obsolète | structurellement dupliqué | manifestement pauvre. Justification obligatoire dans rewrite_reason.
   - INSERT  : nouvelle section absente de l'article actuel (uniquement si page_fit ≥ 6)
-  - MOVE    : section existante à déplacer à cette position
-  - MERGE   : fusionner deux sections existantes en une seule
+
+BIAS FORT : préférer EXPAND à REWRITE. En cas de doute, choisir EXPAND.
 
 RÈGLES DE PRIORITÉ NARRATIVE (ordonnancement) :
 - narrative_priority 1 (CORE) : répondent directement à l'intention principale de la page → TOUJOURS en premier
@@ -312,6 +331,7 @@ RÈGLES ABSOLUES :
 3. La conclusion (is_conclusion: true) doit être la DERNIÈRE section, action REWRITE ou MERGE obligatoirement.
 4. Une seule section is_conclusion autorisée. Aucune section ne peut la suivre.
 5. Commercial : max 2 sections avec commercial_integration "light" + uniquement la conclusion avec "cta".
+6. Pour chaque REWRITE d'une section existante, rewrite_reason est OBLIGATOIRE et non null.
 
 Format JSON requis (tableau d'objets) :
 [
@@ -327,7 +347,9 @@ Format JSON requis (tableau d'objets) :
     "page_fit": 8,
     "disposition": "integrate",
     "is_conclusion": false,
-    "commercial_integration": "none"
+    "commercial_integration": "none",
+    "preservation": "HIGH",
+    "rewrite_reason": null
   }}
 ]
 """

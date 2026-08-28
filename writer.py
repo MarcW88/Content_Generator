@@ -1690,6 +1690,8 @@ def rewrite_from_merge_plan(
 
     total_in = total_out = 0
     final_parts: list[str] = []
+    _retention_kept = 0   # sections whose original text is preserved verbatim
+    _retention_total = 0  # total existing sections (excluding INSERT)
 
     logger.info("[MergePlan] Executing %d-section plan", len(merge_plan))
 
@@ -1799,6 +1801,12 @@ def rewrite_from_merge_plan(
                                existing_h or heading, action,
                                list(section_by_norm.keys())[:5])
 
+        # Track retention for existing sections
+        if action not in ("INSERT",):
+            _retention_total += 1
+            if action in ("KEEP", "MOVE"):
+                _retention_kept += 1
+
         # ── KEEP / MOVE: output verbatim ──────────────────────────────────────
         if action in ("KEEP", "MOVE"):
             if existing_text:
@@ -1824,16 +1832,17 @@ def rewrite_from_merge_plan(
                     pts = "\n".join(f"- {p}" for p in missing_points)
                     prompt = f"""{style_rules}
 
-La section "## {heading}" existe déjà et est conservée telle quelle ci-dessus.
-Rédige UNIQUEMENT 1 à 3 paragraphes COMPLÉMENTAIRES (sans titre H2/H3) à ajouter APRÈS le texte existant.
+La section "## {heading}" de l'article existant a été conservée verbatim ci-dessus (NE PAS la réécrire).
+Rédige UNIQUEMENT des blocs COMPLÉMENTAIRES (sans titre H2/H3) à ajouter après le texte existant.
 
-Points à couvrir :
+Nouvelles informations à ajouter :
 {pts}
 
-Règles :
-- Ne répète aucun élément du texte existant.
-- Commence directement par un paragraphe en prose.
-- Mots cibles : {word_target}.
+Contraintes ABSOLUES :
+- NE PAS répéter ni reformuler le texte existant.
+- Commence directement par un paragraphe de contenu nouveau.
+- Maximum 2-3 paragraphes. Chaque paragraphe : 3-5 phrases, une idée complète.
+- Mots cibles pour les ajouts : {word_target}.
 - Même ton et même style que le texte existant.
 - {commercial_instruction}
 """
@@ -1849,31 +1858,37 @@ Règles :
             else:
                 action = "INSERT"  # no existing text → generate fresh
 
-        # ── REWRITE: generate integrating existing content ────────────────────
+        # ── REWRITE: preserve existing as base, insert new content within it ───
         if action == "REWRITE":
             pts = "\n".join(f"- {p}" for p in missing_points) or "- Voir briefing."
+            rewrite_reason = item.get("rewrite_reason") or ""
             existing_block = ""
             if existing_text:
                 body = re.sub(r'^#{1,3}\s+.+\n', '', existing_text, count=1).strip()
                 existing_block = f"""
---- CONTENU EXISTANT À INTÉGRER ---
-{body[:2000]}
---- FIN ---
+--- TEXTE ORIGINAL (BASE DE TRAVAIL) ---
+{body[:2500]}
+--- FIN DU TEXTE ORIGINAL ---
 """
             max_tokens = min(
-                max(calculate_max_tokens_from_word_estimate(word_target) + 600, 1000),
-                2500,
+                max(calculate_max_tokens_from_word_estimate(word_target) + 800, 1200),
+                3000,
             )
+            rewrite_context = f"Raison de la réécriture : {rewrite_reason}" if rewrite_reason else ""
             prompt = f"""{style_rules}
 
-Réécris la section "## {heading}" pour l'article optimisé.
+Optimise la section "## {heading}" en conservant au maximum le texte original.
+{rewrite_context}
 {existing_block}
-Points supplémentaires à intégrer :
+Nouvelles informations à intégrer :
 {pts}
 
-Règles :
+Contraintes ABSOLUES — PRESERVATION FIRST :
+- CONSERVE les phrases originales existantes VERBATIM autant que possible.
+- N'efface PAS les paragraphes existants : insère les nouvelles informations AVANT, ENTRE ou APRÈS eux.
+- Ne réécris une phrase existante que si elle est factuellement incorrecte ou structurellement incompatible.
+- L'output doit contenir la majorité du texte original (modifié uniquement si justifié).
 - Commence par "## {heading}".
-- Si du contenu existant est fourni, intègre-le naturellement (verbatim ou reformulé) dans la section.
 - Mots cibles : {word_target}.
 - {commercial_instruction}
 - Termine par une phrase complète.
@@ -1918,14 +1933,20 @@ Règles :
             logger.info("[MergePlan] INSERT '%s' — %d tokens", heading, in_t + out_t)
 
     full_article = "\n\n".join(p for p in final_parts if p.strip())
-    logger.info("[MergePlan] Done — %d sections, %d tokens total",
-                len(merge_plan), total_in + total_out)
-    
+
+    # Content retention metric
+    retention_pct = int(100 * _retention_kept / _retention_total) if _retention_total else 0
+    logger.info("[MergePlan] Done — %d sections, retention %d/%d verbatim (%.0f%%), %d tokens total",
+                len(merge_plan), _retention_kept, _retention_total, retention_pct, total_in + total_out)
+    if retention_pct < 70 and _retention_total > 0:
+        logger.warning("[MergePlan] QA RETENTION: %.0f%% < 70%% target — many sections were rewritten",
+                       retention_pct)
+
     issues, in_t, out_t = check_promise_consistency(full_article, system)
     total_in  += in_t
     total_out += out_t
-    
-    return full_article, total_in, total_out
+
+    return full_article, total_in, total_out, retention_pct
 
 
 def check_promise_consistency(article: str, system: str) -> tuple[list[str], int, int]:

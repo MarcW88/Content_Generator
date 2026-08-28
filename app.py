@@ -570,6 +570,8 @@ elif page == "generate":
                         trel    = item.get("topical_relevance") or item.get("relevance_score") or ""
                         pfit    = item.get("page_fit") or ""
                         comm    = (item.get("commercial_integration") or "none").lower()
+                        pres    = (item.get("preservation") or "").upper()
+                        rw_why  = item.get("rewrite_reason") or ""
                         is_concl= item.get("is_conclusion", False)
                         col1, col2 = st.columns([1, 5])
                         with col1:
@@ -586,10 +588,15 @@ elif page == "generate":
                                 meta_parts.append(f"Fit {pfit}/10")
                             if prio:
                                 meta_parts.append(_PRIO_LABELS.get(prio, f"P{prio}"))
+                            if pres:
+                                _PRES_ICONS = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}
+                                meta_parts.append(f"{_PRES_ICONS.get(pres,'⚪')} {pres}")
                             if wt:
                                 meta_parts.append(f"{wt} mots")
                             if meta_parts:
                                 st.caption(" · ".join(meta_parts))
+                            if rw_why:
+                                st.caption(f"⚠️ Raison réécriture : {rw_why}")
                             if pts:
                                 st.caption("Points : " + " · ".join(pts[:4]))
                     if separate:
@@ -888,12 +895,13 @@ elif page == "generate":
                                 if pl.get("merge_plan"):
                                     st.write("Mode Content Gap — rédaction selon le plan de fusion…")
                                     from writer import rewrite_from_merge_plan
-                                    text, in_t, out_t = rewrite_from_merge_plan(
+                                    text, in_t, out_t, retention_pct = rewrite_from_merge_plan(
                                         merge_plan       = pl["merge_plan"],
                                         existing_content = pl["existing_content"],
                                         briefing         = briefing_with_feedback,
                                         system           = system,
                                     )
+                                    pl["retention_pct"] = retention_pct
                                 else:
                                     st.write("Mode Content Gap — amélioration du contenu existant…")
                                     text, in_t, out_t = rewrite_article_by_sections(
@@ -911,6 +919,11 @@ elif page == "generate":
                             wc = _count_words(text)
                             mode_label = "amélioré" if pl.get("existing_content") else "chunked"
                             st.write(f"Article — {wc} mots ({mode_label})")
+                            # Content retention metric
+                            if pl.get("retention_pct") is not None:
+                                ret = pl["retention_pct"]
+                                ret_color = "✅" if ret >= 70 else "⚠️"
+                                st.write(f"{ret_color} Rétention du contenu original : **{ret}%** (cible ≥ 70%)")
                             # Promise consistency QA (merge plan mode only)
                             if pl.get("merge_plan"):
                                 from writer import check_promise_consistency
