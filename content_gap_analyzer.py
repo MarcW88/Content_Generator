@@ -79,11 +79,80 @@ Schéma attendu :
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+# Patterns that mark the end of real article content in scraped pages
+_FOOTER_PATTERNS = re.compile(
+    r'^(Related Articles?|Articles (similaires|connexes)|Lire aussi|'
+    r'Vous (pourriez|aimerez) aussi|Articles liés|'
+    r'Partager (cet|l.article)|Share this|'
+    r'\\\s*\\|Tags\s*:|Catégorie|Filed under)',
+    re.IGNORECASE,
+)
+# Patterns that mark nav/UI noise lines to skip
+_NAV_LINE = re.compile(
+    r'^(NL|EN|FR|DE|IT|ES|Se connecter|Login|Sign in|'
+    r'Mon compte|Panier|Cart|Menu|Navigation|Toggle|'
+    r'Table of contents|Table des matières|'
+    r'Share this article|Partager cet article|'
+    r'\d{1,2}\s+(janvier|février|mars|avril|mai|juin|'
+    r'juillet|août|septembre|octobre|novembre|décembre)\s+\d{4}|'
+    r'\d+\s+minutes?\s*(de lecture)?$)',
+    re.IGNORECASE,
+)
+
+
+def _clean_article_body(content: str) -> str:
+    """
+    Strip navigation, breadcrumbs, banners, and footer noise from a scraped page.
+    Returns just the article body: intro paragraph(s) + H2 sections.
+    """
+    lines = content.split("\n")
+    clean: list[str] = []
+    article_started = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Stop at footer markers
+        if _FOOTER_PATTERNS.match(stripped):
+            break
+        # Stop at Firecrawl artifact lines (e.g. "\ \  \ ")
+        if re.match(r'^[\\\s]{0,6}$', stripped) and len(stripped) > 1:
+            if not article_started:
+                continue
+            break
+
+        # H2/H3 headings always belong to article body
+        if re.match(r'^#{1,3}\s+', stripped):
+            article_started = True
+            clean.append(line)
+            continue
+
+        # Skip nav-like lines before article starts
+        if not article_started:
+            # Breadcrumb (contains " > ")
+            if ' > ' in stripped and len(stripped) < 120:
+                continue
+            # Short lines without sentence punctuation = nav items
+            if len(stripped) < 55 and not any(c in stripped for c in '.!?,;:'):
+                continue
+            # Known nav patterns
+            if _NAV_LINE.match(stripped):
+                continue
+            # First real sentence found → article has started
+            if len(stripped) > 60 and any(c in stripped for c in '.!?,;'):
+                article_started = True
+
+        if article_started:
+            clean.append(line)
+
+    return "\n".join(clean).strip()
+
+
 def _extract_headings(content: str) -> list[str]:
-    """Extract H1/H2/H3 headings from markdown content."""
+    """Extract H2/H3 headings from markdown content (skip H1)."""
     headings = []
     for line in content.split("\n"):
-        m = re.match(r'^(#{1,3})\s+(.+)$', line.strip())
+        m = re.match(r'^(#{2,3})\s+(.+)$', line.strip())
         if m:
             headings.append(m.group(2).strip())
     return headings
@@ -132,12 +201,15 @@ def _build_gap_brief(analysis: "ContentGapAnalysis") -> str:
     """Format the gap analysis as a context_doc string for briefing injection."""
     lines = [
         "=== INSTRUCTION MODE CONTENT GAP ===",
-        "Une page existante a été analysée ci-dessous.",
-        "Le briefing doit COMBLER les lacunes identifiées.",
-        "- Renforce les sections présentes mais superficielles.",
-        "- Couvre ABSOLUMENT les sujets manquants.",
-        "- Ne reproduis pas l'existant : améliore-le et complète-le.",
-        "- Le plan de rédaction doit différer de la structure actuelle pour apporter de la valeur ajoutée.",
+        "Une page existante est en cours d'optimisation. Elle se positionne déjà en SEO.",
+        "OBJECTIF : enrichir cette page, pas la remplacer.",
+        "",
+        "RÈGLES ABSOLUES pour le plan de rédaction :",
+        "- CONSERVE les titres H2 existants EXACTEMENT tels quels dans le plan.",
+        "- Insère les nouvelles sections manquantes AUX BONS ENDROITS dans le plan (pas à la fin).",
+        "- Pour les sections existantes faibles, enrichis leur contenu (ajoute des sous-sections H3 si nécessaire).",
+        "- Couvre ABSOLUMENT les sujets manquants identifiés.",
+        "- Le texte existant de chaque section sera conservé verbatim — le plan doit donc garder les titres exacts.",
         "",
         "=== ANALYSE DE LA PAGE EXISTANTE ===",
         f"URL analysée : {analysis.existing_url}",
@@ -145,8 +217,9 @@ def _build_gap_brief(analysis: "ContentGapAnalysis") -> str:
     ]
 
     if analysis.existing_headings:
-        lines += ["", "Structure actuelle (H2/H3) :"]
+        lines += ["", "Titres H2/H3 ACTUELS (à reprendre EXACTEMENT dans le plan) :"]
         lines += [f"  - {h}" for h in analysis.existing_headings[:10]]
+        lines += ["", "⚠️  Ces titres doivent apparaître TELS QUELS dans le plan de rédaction."]
 
     lines += ["", f"Résumé des gaps : {analysis.gap_summary or '—'}"]
 
@@ -187,11 +260,16 @@ def build_content_gap_analysis(
     # Step 1 — Scrape existing page
     logger.info("[Gap] Scraping existing page: %s", existing_url)
     try:
-        content = scrape_page(existing_url)
+        raw_content = scrape_page(existing_url)
+        content = _clean_article_body(raw_content)
+        if not content:
+            logger.warning("[Gap] Clean body empty — falling back to raw content")
+            content = raw_content
         analysis.existing_content = content
         analysis.word_count       = len(content.split())
         analysis.existing_headings = _extract_headings(content)
-        logger.info("[Gap] Scraped %d chars / ~%d words", len(content), analysis.word_count)
+        logger.info("[Gap] Scraped %d chars / ~%d words (cleaned from %d raw chars)",
+                    len(content), analysis.word_count, len(raw_content))
     except Exception as exc:
         logger.error("[Gap] Failed to scrape %s: %s", existing_url, exc)
         return analysis
