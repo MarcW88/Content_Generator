@@ -1329,6 +1329,17 @@ def rewrite_article_by_sections(
 
     Returns (enriched_article, total_input_tokens, total_output_tokens).
     """
+    # ── Safety-net: strip nav/footer noise even if content was scraped before the fix
+    try:
+        from content_gap_analyzer import _clean_article_body
+        cleaned = _clean_article_body(existing_content)
+        if cleaned and len(cleaned) > 100:
+            logger.info("[Rewrite] Cleaned existing content: %d → %d chars",
+                        len(existing_content), len(cleaned))
+            existing_content = cleaned
+    except Exception:
+        pass
+
     style_rules = extract_style_rules(briefing)
     existing_sections = _split_content_by_h2(existing_content)
     blocks = extract_article_blocks(briefing)
