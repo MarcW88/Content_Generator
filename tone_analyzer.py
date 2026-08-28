@@ -76,16 +76,17 @@ def _scrape_with_bs4(url: str) -> str:
     return soup.get_text(separator="\n", strip=True)
 
 
-def scrape_page(url: str) -> str:
+def scrape_page(url: str, max_chars: int | None = None) -> str:
     """Scrape one page — Firecrawl first, BS4 as fallback."""
+    limit = max_chars if max_chars is not None else config.SCRAPE_MAX_CHARS
     if config.FIRECRAWL_API_KEY:
         try:
             text = _scrape_with_firecrawl(url)
             if text.strip():
-                return text[: config.SCRAPE_MAX_CHARS]
+                return text[:limit]
         except Exception as exc:
             logger.warning("Firecrawl failed for %s: %s — falling back to BS4", url, exc)
-    return _scrape_with_bs4(url)[: config.SCRAPE_MAX_CHARS]
+    return _scrape_with_bs4(url)[:limit]
 
 
 def _parse_sitemap_locs(xml_text: str) -> list[str]:

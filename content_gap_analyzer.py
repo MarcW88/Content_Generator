@@ -449,7 +449,7 @@ def build_content_gap_analysis(
     # Step 1 — Scrape existing page
     logger.info("[Gap] Scraping existing page: %s", existing_url)
     try:
-        raw_content = scrape_page(existing_url)
+        raw_content = scrape_page(existing_url, max_chars=15_000)
         content = _clean_article_body(raw_content)
         if not content:
             logger.warning("[Gap] Clean body empty — falling back to raw content")

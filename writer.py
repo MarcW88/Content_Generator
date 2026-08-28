@@ -1863,9 +1863,10 @@ def rewrite_from_merge_plan(
                                list(section_by_norm.keys())[:5])
 
         # Track retention for existing sections
+        # KEEP/MOVE/EXPAND = original text output verbatim; REWRITE/MERGE = partial
         if action not in ("INSERT",):
             _retention_total += 1
-            if action in ("KEEP", "MOVE"):
+            if action in ("KEEP", "MOVE", "EXPAND"):
                 _retention_kept += 1
 
         # ── DELETE: skip silently but log ───────────────────────────────────
@@ -1916,7 +1917,7 @@ Contraintes ABSOLUES :
 - Même ton et même style que le texte existant.
 - {commercial_instruction}
 """
-                    addition, in_t, out_t = _call_claude(system, prompt, max_tokens=600)
+                    addition, in_t, out_t = _call_claude(system, prompt, max_tokens=1000)
                     addition = _strip_briefing_leakage(addition.strip())
                     addition = "\n".join(
                         l for l in addition.splitlines() if not re.match(r'^#{1,3}\s', l)
