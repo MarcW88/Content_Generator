@@ -916,10 +916,18 @@ elif page == "generate":
                                 from writer import check_promise_consistency
                                 qa_issues, _, _ = check_promise_consistency(text, system)
                                 if qa_issues:
+                                    _QA_ICONS = {
+                                        "PROMISE_CONSISTENCY": "🔢",
+                                        "META_NAVIGATION": "🚫",
+                                        "BACK_REFERENCE": "↩️",
+                                        "PARAGRAPH_DEPTH": "📏",
+                                    }
                                     for issue in qa_issues:
-                                        st.warning(f"⚠️ QA Promesse : {issue}")
+                                        tag = issue.split("]")[0].lstrip("[") if issue.startswith("[") else "QA"
+                                        icon = _QA_ICONS.get(tag, "⚠️")
+                                        st.warning(f"{icon} {issue}")
                                 else:
-                                    st.success("✅ QA Promesse : cohérence des annonces vérifiée")
+                                    st.success("✅ QA Éditorial : aucun problème détecté")
                             detail = f"{wc} mots"
 
                         elif s == 4:  # Métas + révision

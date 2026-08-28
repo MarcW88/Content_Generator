@@ -88,6 +88,29 @@ Tu n'ajoutes JAMAIS de sections de briefing, métadonnées, recommandations SEO 
 Tu respectes strictement la section demandée et tu n'inventes pas de nouveaux H2/H3.
 Chaque phrase doit apporter une information utile, concrète et non répétitive.
 
+RÈGLE : ZÉRO MÉTA-DISCOURS ÉDITORIAL
+N'utilise JAMAIS de formulations qui parlent de l'article lui-même ou de sa structure.
+Exemples ABSOLUMENT INTERDITS :
+- « Dans cet article, vous découvrirez… »
+- « Dans la prochaine section… »
+- « Nous allons voir… » / « Nous verrons ensuite… »
+- « Dans les sections suivantes… »
+- « Plus loin dans cet article… »
+- « Voici ce que nous allons aborder… »
+- « Comme expliqué plus haut… » / « Comme vu précédemment… »
+Règle : écris l'information directement. Les transitions doivent relier des idées, pas décrire la structure du document.
+
+RÈGLE : PROFONDEUR DES PARAGRAPHES
+Un paragraphe standard doit généralement contenir 3 à 5 phrases et développer UNE idée complète :
+- introduire le point ;
+- l'expliquer ou le qualifier ;
+- ajouter un détail utile, un raisonnement ou un contexte pratique ;
+- le relier naturellement au sujet plus large si pertinent.
+Ne découpe PAS une seule idée en plusieurs paragraphes de 1-2 phrases.
+Préfère des paragraphes moins nombreux mais plus substantiels.
+Les paragraphes d'une ou deux phrases ne sont acceptables que pour une introduction courte, une transition ou une conclusion.
+N'ajoute pas de remplissage pour allonger : chaque phrase supplémentaire doit apporter une information utile.
+
 {style_context}
 """
 
@@ -1883,56 +1906,66 @@ Règles :
 
 def check_promise_consistency(article: str, system: str) -> tuple[list[str], int, int]:
     """
-    QA pass: find enumerated promises in the intro (e.g. 'les 6 ordres à apprendre')
-    and verify each promised item is actually covered in the article body.
+    Full editorial QA pass covering:
+      1. PROMISE_CONSISTENCY — enumerated promises (e.g. 'les 6 ordres') vs. delivered content
+      2. META_NAVIGATION     — phrases that reference the article structure
+      3. CONTENT_PREVIEW     — 'Dans cet article vous découvrirez…' type openers
+      4. BACK_REFERENCE      — 'comme vu précédemment', 'comme expliqué plus haut'
+      5. PARAGRAPH_DEPTH     — sections where most paragraphs are < 3 sentences
 
     Returns (issues_list, input_tokens, output_tokens).
-    issues_list is empty if no problems found.
     """
-    prompt = f"""Lis cet article et effectue un audit de cohérence des promesses.
+    prompt = f"""Effectue un audit éditorial complet sur cet article. Réponds UNIQUEMENT avec un tableau JSON.
 
-ÉTAPE 1 — Identifie toutes les promesses énumératives dans l'introduction ou le corps :
-- listes numérotées annoncées ("les 5 erreurs", "6 ordres essentiels", "3 étapes", etc.)
-- toute formule du type "nous allons voir X points / Y techniques / Z sujets"
+VÉRIFICATION 1 — PROMISE_CONSISTENCY
+Identifie les promesses énumératives ("les 6 ordres", "5 erreurs", "3 étapes", etc.).
+Pour chaque promesse, vérifie : a) chaque élément est-il livré ? b) le nombre annoncé correspond-il au livré ?
 
-ÉTAPE 2 — Pour chaque promesse, vérifie :
-a) Chaque élément annoncé est-il réellement traité ?
-b) Le nombre annoncé correspond-il au nombre réellement livré ?
-c) L'ordre annoncé est-il respecté ?
+VÉRIFICATION 2 — META_NAVIGATION
+Repère les phrases qui parlent de la structure de l'article (interdites) :
+- "Dans cet article…", "Dans la prochaine section…", "Nous allons voir…", "Nous verrons ensuite…"
+- "Dans les sections suivantes…", "Plus loin dans cet article…", "Voici ce que nous allons aborder…"
+Pour chaque occurrence trouvée : cite la phrase exacte.
 
-Réponds UNIQUEMENT avec un tableau JSON :
+VÉRIFICATION 3 — BACK_REFERENCE
+Repère les références arrière artificielles :
+- "Comme expliqué plus haut…", "Comme vu précédemment…", "Tel que mentionné…"
+Pour chaque occurrence trouvée : cite la phrase exacte.
+
+VÉRIFICATION 4 — PARAGRAPH_DEPTH
+Identifie les sections H2 où la MAJORITÉ des paragraphes de prose contiennent moins de 3 phrases.
+Ne signale pas les listes, introductions courtes ou conclusions.
+
+Format JSON requis :
 [
   {{
-    "promise": "description de la promesse",
-    "announced": ["élément 1", "élément 2"],
-    "missing": ["éléments manquants ou non trouvés"],
-    "count_announced": 6,
-    "count_delivered": 5,
-    "issue": "description du problème ou null si OK"
+    "type": "PROMISE_CONSISTENCY|META_NAVIGATION|BACK_REFERENCE|PARAGRAPH_DEPTH",
+    "location": "titre de section ou début de paragraphe",
+    "detail": "description précise du problème ou citation exacte",
+    "issue": "résumé en une phrase du problème"
   }}
 ]
 
-Si aucune promesse énumérative n'est détectée, réponds avec [].
+Si aucun problème n'est détecté dans une catégorie, ne l'inclus pas. Si aucun problème, réponds avec [].
 
 ARTICLE :
-{article[:6000]}
+{article[:7000]}
 """
     try:
-        raw, in_t, out_t = _call_claude(system, prompt, max_tokens=800)
+        raw, in_t, out_t = _call_claude(system, prompt, max_tokens=1200)
         if "```" in raw:
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
         results = json.loads(raw.strip())
-        issues = [r["issue"] for r in results if r.get("issue")]
+        issues = [f"[{r.get('type','QA')}] {r.get('issue','')}" for r in results if r.get("issue")]
         if issues:
-            logger.warning("[QA:PromiseConsistency] %d issue(s) detected: %s",
-                           len(issues), " | ".join(issues))
+            logger.warning("[QA:Editorial] %d issue(s): %s", len(issues), " | ".join(issues))
         else:
-            logger.info("[QA:PromiseConsistency] No promise consistency issues detected")
+            logger.info("[QA:Editorial] No editorial issues detected")
         return issues, in_t, out_t
     except Exception as exc:
-        logger.error("[QA:PromiseConsistency] Failed: %s", exc)
+        logger.error("[QA:Editorial] Failed: %s", exc)
         return [], 0, 0
 
 
