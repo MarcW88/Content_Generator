@@ -18,6 +18,7 @@ Chaque passe injecte :
 
 import logging
 import json
+import re
 from dataclasses import dataclass, field
 
 import anthropic
