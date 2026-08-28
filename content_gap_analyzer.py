@@ -353,7 +353,7 @@ def generate_merge_plan(
         logger.info("[MergePlan] Generated %d sections", len(plan))
         return plan
     except Exception as exc:
-        logger.error("[MergePlan] Failed: %s", exc)
+        logger.error("[MergePlan] Failed: %s", exc, exc_info=True)
         return []
 
 

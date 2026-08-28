@@ -835,14 +835,21 @@ elif page == "generate":
                                     unanswered_paa   = ga.get("unanswered_paa", []),
                                     gap_summary      = ga.get("gap_summary", ""),
                                 )
-                                plan = generate_merge_plan(
-                                    existing_content    = pl["existing_content"],
-                                    analysis            = analysis_obj,
-                                    briefing_plan_text  = text,
-                                )
+                                try:
+                                    plan = generate_merge_plan(
+                                        existing_content    = pl["existing_content"],
+                                        analysis            = analysis_obj,
+                                        briefing_plan_text  = text,
+                                    )
+                                except Exception as _mp_exc:
+                                    st.error(f"Merge plan échoué : {_mp_exc}")
+                                    plan = []
                                 pl["merge_plan"] = plan
                                 n_plan = len(plan)
-                                st.success(f"Plan de fusion : {n_plan} section(s) planifiée(s)")
+                                if n_plan > 0:
+                                    st.success(f"Plan de fusion : {n_plan} section(s) planifiée(s)")
+                                else:
+                                    st.warning("Plan de fusion vide — vérifie les logs pour l'erreur")
                                 detail = f"{wc} mots · {n_plan} sections planifiées"
 
                         elif s == 3:  # Article complet
