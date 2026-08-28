@@ -1221,6 +1221,212 @@ Retourne UNIQUEMENT ce bloc H2 complet en markdown.
     return full_article, total_in, total_out
 
 
+# ── Content Gap rewrite helpers ────────────────────────────────────────────────
+
+def _split_content_by_h2(content: str) -> dict[str, str]:
+    """Split markdown content into {h2_title: full_section_text} dict."""
+    sections: dict[str, str] = {}
+    current_title = "_intro"
+    current_lines: list[str] = []
+    for line in content.split("\n"):
+        m = re.match(r'^##\s+(.+)$', line.strip())
+        if m:
+            if current_lines:
+                sections[current_title] = "\n".join(current_lines).strip()
+            current_title = m.group(1).strip()
+            current_lines = [line]
+        else:
+            current_lines.append(line)
+    if current_lines:
+        sections[current_title] = "\n".join(current_lines).strip()
+    return sections
+
+
+def _find_matching_section(sections: dict[str, str], target_title: str) -> str | None:
+    """Return existing section text whose title best matches target_title (fuzzy, case-insensitive)."""
+    def _norm(s: str) -> str:
+        return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
+
+    target_norm = _norm(target_title)
+    # Exact normalised match first
+    for title, text in sections.items():
+        if _norm(title) == target_norm:
+            return text
+    # Word-overlap fallback (≥ 60 %)
+    target_words = set(target_norm.split())
+    for title, text in sections.items():
+        existing_words = set(_norm(title).split())
+        if target_words and existing_words:
+            overlap = len(target_words & existing_words) / max(len(target_words), len(existing_words))
+            if overlap >= 0.60:
+                return text
+    return None
+
+
+def rewrite_article_by_sections(
+    existing_content: str,
+    briefing: str,
+    system: str,
+) -> tuple[str, int, int]:
+    """
+    Content Gap mode: improve an existing article section by section.
+
+    - For each H2 in the new briefing plan that already exists in the current
+      article → rewrite/expand it (keep what's good, deepen what's thin).
+    - For each H2 that is brand-new (missing topic) → generate it from scratch.
+
+    Returns (full_improved_article, total_input_tokens, total_output_tokens).
+    """
+    style_rules = extract_style_rules(briefing)
+    existing_sections = _split_content_by_h2(existing_content)
+    blocks = extract_article_blocks(briefing)
+    logger.info("[Rewrite] %d existing H2 sections, %d planned blocks",
+                len(existing_sections), len(blocks))
+
+    if not blocks:
+        logger.warning("[Rewrite] No blocks found — falling back to full-content improvement")
+        prompt = f"""{style_rules}
+
+Contenu existant à améliorer :
+{existing_content[:6000]}
+
+Plan d'amélioration (extrait du briefing) :
+{filter_briefing_for_content(briefing)[:4000]}
+
+Réécris et améliore ce contenu en comblant les lacunes identifiées.
+Garde les bonnes parties, développe les sections trop courtes, ajoute les sujets manquants.
+Retourne uniquement l'article final en markdown. Termine par une phrase complète.
+"""
+        text, in_t, out_t = _call_claude(system, prompt, max_tokens=6000)
+        return _strip_briefing_leakage(text), in_t, out_t
+
+    sections = []
+    total_in = total_out = 0
+    covered_summary: list[str] = []
+    outline = "\n".join(f"{i}. {b.title}" for i, b in enumerate(blocks, 1))
+
+    for idx, block in enumerate(blocks, 1):
+        existing_text = _find_matching_section(existing_sections, block.title)
+
+        child_specs = [
+            f"- ### {c['title']} — mots : {c.get('word_estimate') or '100-180'}"
+            for c in block.children
+        ]
+        children_block = "\n".join(child_specs) if child_specs else "Aucun H3 imposé."
+        must_cover = "\n".join(f"- {item}" for item in block.must_cover) or "- Voir briefing."
+        covered = "\n".join(covered_summary[-5:]) or "Aucune section encore rédigée."
+
+        min_words, max_words = _parse_word_estimate_bounds(block.word_estimate, 250, 380)
+        for child in block.children:
+            c_min, c_max = _parse_word_estimate_bounds(child.get("word_estimate", ""), 100, 160)
+            min_words += c_min
+            max_words += c_max
+        target_words = f"{min_words}-{max_words}"
+        max_tokens = min(max(calculate_max_tokens_from_word_estimate(target_words) + 700, 1200), 3000)
+
+        if existing_text:
+            logger.info("[Rewrite] H2 %d/%d — improving '%s' (%d words existing)",
+                        idx, len(blocks), block.title, _count_text_words(existing_text))
+            prompt = f"""{style_rules}
+
+---
+Plan global de l'article amélioré :
+{outline}
+
+Sections déjà réécrites :
+{covered}
+
+Section EXISTANTE à améliorer :
+## {block.title}
+
+Contenu actuel de cette section :
+{existing_text[:2500]}
+
+Objectif : améliore cette section.
+- Garde ce qui est correct et utile.
+- Développe les passages trop courts ou superficiels.
+- Ajoute les informations manquantes : {', '.join(block.must_cover) or 'voir sous-sections'}.
+- Nuance les affirmations trop catégoriques ou imprécises.
+- Mots cibles pour ce bloc complet : {target_words}
+
+Sous-sections H3 à inclure :
+{children_block}
+
+Règles strictes :
+- Commence directement par "## {block.title}".
+- Structure GEO : commence par une phrase-réponse directe, puis développe.
+- Ne répète PAS les sections précédentes déjà rédigées.
+- Retourne UNIQUEMENT ce bloc H2 amélioré en markdown.
+- Termine par une phrase complète.
+"""
+        else:
+            logger.info("[Rewrite] H2 %d/%d — new section '%s' (missing topic)",
+                        idx, len(blocks), block.title)
+            prompt = f"""{style_rules}
+
+---
+Plan global de l'article amélioré :
+{outline}
+
+Sections déjà réécrites :
+{covered}
+
+NOUVELLE section à créer (sujet absent du contenu actuel) :
+## {block.title}
+Intention : {block.intent or "répondre clairement à l'intention de cette section"}
+Mots cibles : {target_words}
+
+Sous-sections H3 à inclure :
+{children_block}
+
+Points obligatoires :
+{must_cover}
+
+Règles strictes :
+- Cette section n'existe pas encore — crée-la entièrement.
+- Commence directement par "## {block.title}".
+- Structure GEO : commence par une phrase-réponse directe, puis développe.
+- Ne répète PAS les sections précédentes déjà réécrites.
+- Retourne UNIQUEMENT ce bloc H2 en markdown.
+- Termine par une phrase complète.
+"""
+
+        section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
+        section = _strip_briefing_leakage(section)
+        if not section.lstrip().startswith("##"):
+            section = f"## {block.title}\n\n{section}"
+
+        issues = _section_validation_issues(section, min_words, max_words)
+        if issues:
+            logger.warning("[Rewrite] Repairing block '%s': %s", block.title, ", ".join(issues))
+            repaired, repair_in, repair_out = _repair_article_block(
+                system=system,
+                style_rules=style_rules,
+                block_title=block.title,
+                section_text=section,
+                target_words=target_words,
+                issues=issues,
+            )
+            repaired = _strip_briefing_leakage(repaired)
+            section = repaired if repaired.lstrip().startswith("##") else f"## {block.title}\n\n{repaired}"
+            in_t += repair_in
+            out_t += repair_out
+            if _looks_truncated(section):
+                addition, cont_in, cont_out = _continue_article_block(system, style_rules, block.title, section)
+                section = f"{section.rstrip()} {addition.strip()}".strip()
+                in_t += cont_in
+                out_t += cont_out
+
+        sections.append(section)
+        total_in += in_t
+        total_out += out_t
+        covered_summary.append(f"- {block.title} : {_count_text_words(section)} mots rédigés")
+
+    full_article = "\n\n".join(sections)
+    logger.info("[Rewrite] Complete — %d blocks, %d total tokens", len(sections), total_in + total_out)
+    return full_article, total_in, total_out
+
+
 # ── Claude caller ──────────────────────────────────────────────────────────────
 
 def _call_claude(system: str, user_prompt: str,

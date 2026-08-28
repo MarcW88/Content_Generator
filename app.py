@@ -17,7 +17,7 @@ from cost_tracker import estimate_request_cost, format_usd, PassCost
 from writer import (
     _build_article_system, _build_briefing_system, _build_meta_system, _call_claude,
     BRIEFING_PROMPT, ARTICLE_PROMPT, META_PROMPT,
-    generate_chunked_briefing, generate_article_by_sections,
+    generate_chunked_briefing, generate_article_by_sections, rewrite_article_by_sections,
     ArticleOutput, format_final_output
 )
 
@@ -401,8 +401,9 @@ elif page == "generate":
                 "lang":          article_lang,
                 "page_type":     page_type,
                 "context_doc":   context_text,
-                "existing_url":  existing_url.strip(),
-                "gap_analysis":  None,
+                "existing_url":     existing_url.strip(),
+                "gap_analysis":     None,
+                "existing_content": "",
                 "internal_links_data": internal_links_data,
                 "refresh_style": refresh_style,
                 # outputs
@@ -611,7 +612,8 @@ elif page == "generate":
                                     pl.get(field), list) else [] if isinstance(
                                     pl.get(field), list) else ""
                         if redo_idx <= 1:
-                            pl["gap_analysis"] = None
+                            pl["gap_analysis"]     = None
+                            pl["existing_content"] = ""
                         pl["step"]    = redo_idx
                         pl["waiting"] = False
                         pl["stopped"] = False
@@ -736,6 +738,7 @@ elif page == "generate":
                                 "unanswered_paa":   gap.unanswered_paa,
                                 "gap_summary":      gap.gap_summary,
                             }
+                            pl["existing_content"] = gap.existing_content
                             # Merge gap_brief into context_doc for the briefing step
                             existing_ctx = pl.get("context_doc") or ""
                             pl["context_doc"] = (
@@ -784,14 +787,23 @@ elif page == "generate":
                             user_feedback = pl.get("user_feedback", "")
                             feedback_block = f"\n\n--- FEEDBACK UTILISATEUR ---\n{user_feedback}\n--- FIN FEEDBACK ---" if user_feedback else ""
                             briefing_with_feedback = pl["briefing"] + feedback_block
-                            text, in_t, out_t = generate_article_by_sections(
-                                briefing=briefing_with_feedback,
-                                system=system,
-                            )
+                            if pl.get("existing_content"):
+                                st.write("Mode Content Gap — amélioration du contenu existant…")
+                                text, in_t, out_t = rewrite_article_by_sections(
+                                    existing_content=pl["existing_content"],
+                                    briefing=briefing_with_feedback,
+                                    system=system,
+                                )
+                            else:
+                                text, in_t, out_t = generate_article_by_sections(
+                                    briefing=briefing_with_feedback,
+                                    system=system,
+                                )
                             pl["draft_article"] = text
                             pl["full_article"] = text
                             wc = _count_words(text)
-                            st.write(f"Article — {wc} mots (chunked)")
+                            mode_label = "amélioré" if pl.get("existing_content") else "chunked"
+                            st.write(f"Article — {wc} mots ({mode_label})")
                             detail = f"{wc} mots"
 
                         elif s == 4:  # Métas + révision
