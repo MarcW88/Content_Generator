@@ -325,13 +325,14 @@ def generate_merge_plan(
         )
     existing_summary = "\n".join(existing_summary_lines) or "Aucune section H2 détectée."
 
+    safe_briefing = (briefing_plan_text[:3000] if briefing_plan_text else "—").replace("{", "{{").replace("}", "}}")
     prompt = _MERGE_PLAN_PROMPT.format(
         existing_sections_summary = existing_summary,
         gap_summary    = analysis.gap_summary or "—",
         missing_topics = ", ".join(analysis.missing_topics[:10]) or "—",
         weak_sections  = ", ".join(analysis.weak_sections[:8]) or "—",
         unanswered_paa = ", ".join(analysis.unanswered_paa[:6]) or "—",
-        briefing_plan  = briefing_plan_text[:3000] if briefing_plan_text else "—",
+        briefing_plan  = safe_briefing,
     )
 
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
