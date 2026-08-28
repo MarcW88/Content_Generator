@@ -1683,6 +1683,11 @@ def rewrite_from_merge_plan(
         _norm(k): v for k, v in existing_sections.items() if k != "_intro"
     }
 
+    # Log available sections for diagnostics
+    logger.info("[MergePlan] Existing sections available for matching (%d): %s",
+                len(section_by_norm),
+                " | ".join(list(section_by_norm.keys())[:10]))
+
     total_in = total_out = 0
     final_parts: list[str] = []
 
@@ -1769,11 +1774,30 @@ def rewrite_from_merge_plan(
         else:  # cta
             commercial_instruction = "Inclus un appel à l'action vers la marque/produit en fin de section."
 
-        # Find existing section text (try existing_heading first, then heading)
+        # Find existing section text: exact match first, then fuzzy word-overlap fallback
         existing_text = (
             section_by_norm.get(_norm(existing_h))
             or section_by_norm.get(_norm(heading))
         )
+        if not existing_text and action in ("KEEP", "MOVE", "EXPAND", "REWRITE"):
+            # Fuzzy fallback: find best-matching section by word overlap
+            query_words = set(_norm(existing_h or heading).split()) - {"de", "du", "le", "la", "les", "des", "un", "une", "et", "en", "par"}
+            best_key, best_score = "", 0.0
+            for k in section_by_norm:
+                k_words = set(k.split())
+                if not k_words:
+                    continue
+                overlap = len(query_words & k_words) / max(len(query_words), len(k_words), 1)
+                if overlap > best_score:
+                    best_score, best_key = overlap, k
+            if best_score >= 0.4:
+                existing_text = section_by_norm[best_key]
+                logger.info("[MergePlan] Fuzzy match '%s' → '%s' (score %.2f)",
+                            existing_h or heading, best_key, best_score)
+            else:
+                logger.warning("[MergePlan] No match found for '%s' (action=%s) — available: %s",
+                               existing_h or heading, action,
+                               list(section_by_norm.keys())[:5])
 
         # ── KEEP / MOVE: output verbatim ──────────────────────────────────────
         if action in ("KEEP", "MOVE"):
