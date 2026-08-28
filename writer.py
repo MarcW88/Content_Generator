@@ -1270,14 +1270,18 @@ def rewrite_article_by_sections(
     system: str,
 ) -> tuple[str, int, int]:
     """
-    Content Gap mode — PRESERVES existing content verbatim, only adds to it.
+    Content Gap mode — PRESERVES existing content verbatim, structured by briefing plan.
 
     Strategy:
-    1. Every existing H2 section is kept EXACTLY as-is (no rewriting).
-    2. Sections identified as weak (have must_cover items in the briefing plan)
-       get a few complementary paragraphs APPENDED after their existing text.
-    3. Sections for missing topics (no match in existing content) are generated
-       from scratch and appended at the end.
+    1. Output intro (text before first H2) from existing content as-is.
+    2. Follow the BRIEFING plan order for all H2 blocks:
+       - Block matches existing section → output existing text VERBATIM.
+         If the block has must_cover items (weak section) → append complementary
+         paragraphs after the existing text.
+       - Block has no match in existing → generate new section from scratch,
+         placed exactly where the briefing plan puts it (logical position).
+    3. Existing sections not covered by the briefing plan are appended at the end
+       so no original content is ever lost.
 
     Returns (enriched_article, total_input_tokens, total_output_tokens).
     """
@@ -1289,34 +1293,53 @@ def rewrite_article_by_sections(
 
     total_in = total_out = 0
     final_parts: list[str] = []
+    handled_existing: set[str] = set()  # titles of existing sections already output
 
-    # ── Step 1 : Keep ALL existing sections verbatim, enrich weak ones ────────
-    for title, text in existing_sections.items():
-        # Always keep the existing text as-is
-        final_parts.append(text)
+    # ── Always output intro verbatim first ────────────────────────────────────
+    if "_intro" in existing_sections and existing_sections["_intro"].strip():
+        final_parts.append(existing_sections["_intro"])
+        handled_existing.add("_intro")
 
-        if title == "_intro":
-            continue
+    if not blocks:
+        # No plan extracted — keep full existing content and append gap enrichment
+        logger.warning("[Rewrite] No blocks found — keeping existing content + gap context")
+        remaining = "\n\n".join(
+            text for title, text in existing_sections.items() if title != "_intro"
+        )
+        if remaining.strip():
+            final_parts.append(remaining)
+        full_article = "\n\n".join(p for p in final_parts if p.strip())
+        return full_article, 0, 0
 
-        # Find the corresponding briefing block (if any) to detect weak sections
-        matching_block = None
-        for block in blocks:
-            if _find_matching_section({title: text}, block.title) is not None:
-                matching_block = block
-                break
+    # ── Follow briefing plan order ────────────────────────────────────────────
+    new_sections_count = 0
+    enriched_count = 0
 
-        # Only append complementary content if there are specific missing points
-        if matching_block and matching_block.must_cover:
-            missing_points = "\n".join(f"- {item}" for item in matching_block.must_cover)
-            logger.info("[Rewrite] Enriching existing section '%s' — %d missing points",
-                        title, len(matching_block.must_cover))
-            prompt = f"""{style_rules}
+    for block in blocks:
+        existing_text = _find_matching_section(existing_sections, block.title)
+
+        if existing_text is not None:
+            # ── Existing section: output verbatim ──────────────────────────
+            matching_title = next(
+                (t for t, txt in existing_sections.items() if txt is existing_text), None
+            )
+            if matching_title:
+                handled_existing.add(matching_title)
+
+            final_parts.append(existing_text)
+
+            # Enrich only if there are explicit missing points to add
+            if block.must_cover:
+                missing_points = "\n".join(f"- {item}" for item in block.must_cover)
+                logger.info("[Rewrite] Enriching '%s' — %d missing points",
+                            block.title, len(block.must_cover))
+                prompt = f"""{style_rules}
 
 La section suivante existe déjà dans l'article et DOIT être conservée telle quelle.
-Tu dois UNIQUEMENT rédiger du contenu COMPLÉMENTAIRE à ajouter APRÈS le texte existant.
+Tu dois UNIQUEMENT rédiger du contenu COMPLÉMENTAIRE à insérer APRÈS le texte existant.
 
 --- TEXTE EXISTANT (ne pas modifier, ne pas répéter) ---
-{text[:2500]}
+{existing_text[:2500]}
 --- FIN DU TEXTE EXISTANT ---
 
 Points manquants à couvrir dans l'ajout :
@@ -1329,39 +1352,37 @@ Règles ABSOLUES :
 - Ne commence PAS par un titre H2 ou H3 — commence directement par un paragraphe.
 - Termine par une phrase complète.
 """
-            addition, in_t, out_t = _call_claude(system, prompt, max_tokens=900)
-            addition = _strip_briefing_leakage(addition.strip())
-            # Strip any accidental H2 heading Claude might add
-            addition_lines = [l for l in addition.splitlines() if not re.match(r'^##\s', l)]
-            addition = "\n".join(addition_lines).strip()
-            if addition:
-                final_parts.append(addition)
-            total_in  += in_t
-            total_out += out_t
+                addition, in_t, out_t = _call_claude(system, prompt, max_tokens=900)
+                addition = _strip_briefing_leakage(addition.strip())
+                addition_lines = [l for l in addition.splitlines()
+                                  if not re.match(r'^##\s', l)]
+                addition = "\n".join(addition_lines).strip()
+                if addition:
+                    final_parts.append(addition)
+                    enriched_count += 1
+                total_in  += in_t
+                total_out += out_t
 
-    # ── Step 2 : Generate brand-new sections for missing topics ───────────────
-    new_sections_added = 0
-    for block in blocks:
-        if _find_matching_section(existing_sections, block.title) is not None:
-            continue  # Already handled above
+        else:
+            # ── New section: generate from scratch at this position ────────
+            child_specs = [
+                f"- ### {c['title']} — mots : {c.get('word_estimate') or '100-180'}"
+                for c in block.children
+            ]
+            children_block = "\n".join(child_specs) if child_specs else "Aucun H3 imposé."
+            must_cover     = "\n".join(f"- {item}" for item in block.must_cover) or "- Voir briefing."
 
-        child_specs = [
-            f"- ### {c['title']} — mots : {c.get('word_estimate') or '100-180'}"
-            for c in block.children
-        ]
-        children_block = "\n".join(child_specs) if child_specs else "Aucun H3 imposé."
-        must_cover    = "\n".join(f"- {item}" for item in block.must_cover) or "- Voir briefing."
+            min_words, max_words = _parse_word_estimate_bounds(block.word_estimate, 250, 380)
+            for child in block.children:
+                c_min, c_max = _parse_word_estimate_bounds(child.get("word_estimate", ""), 100, 160)
+                min_words += c_min
+                max_words += c_max
+            target_words = f"{min_words}-{max_words}"
+            max_tokens   = min(max(calculate_max_tokens_from_word_estimate(target_words) + 700, 1200), 3000)
 
-        min_words, max_words = _parse_word_estimate_bounds(block.word_estimate, 250, 380)
-        for child in block.children:
-            c_min, c_max = _parse_word_estimate_bounds(child.get("word_estimate", ""), 100, 160)
-            min_words += c_min
-            max_words += c_max
-        target_words = f"{min_words}-{max_words}"
-        max_tokens   = min(max(calculate_max_tokens_from_word_estimate(target_words) + 700, 1200), 3000)
-
-        logger.info("[Rewrite] New section '%s' — %s mots", block.title, target_words)
-        prompt = f"""{style_rules}
+            logger.info("[Rewrite] New section '%s' at plan position %d — %s mots",
+                        block.title, blocks.index(block) + 1, target_words)
+            prompt = f"""{style_rules}
 
 NOUVELLE section à créer (sujet absent du contenu actuel) :
 ## {block.title}
@@ -1380,23 +1401,34 @@ Règles strictes :
 - Retourne UNIQUEMENT ce bloc H2 en markdown.
 - Termine par une phrase complète.
 """
-        section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
-        section = _strip_briefing_leakage(section)
-        if not section.lstrip().startswith("##"):
-            section = f"## {block.title}\n\n{section}"
-        if _looks_truncated(section):
-            addition, cont_in, cont_out = _continue_article_block(system, style_rules, block.title, section)
-            section = f"{section.rstrip()} {addition.strip()}".strip()
-            in_t  += cont_in
-            out_t += cont_out
-        final_parts.append(section)
-        total_in  += in_t
-        total_out += out_t
-        new_sections_added += 1
+            section, in_t, out_t = _call_claude(system, prompt, max_tokens=max_tokens)
+            section = _strip_briefing_leakage(section)
+            if not section.lstrip().startswith("##"):
+                section = f"## {block.title}\n\n{section}"
+            if _looks_truncated(section):
+                cont, cont_in, cont_out = _continue_article_block(
+                    system, style_rules, block.title, section)
+                section   = f"{section.rstrip()} {cont.strip()}".strip()
+                in_t  += cont_in
+                out_t += cont_out
+            final_parts.append(section)
+            total_in  += in_t
+            total_out += out_t
+            new_sections_count += 1
+
+    # ── Append any existing sections not covered by the briefing plan ─────────
+    orphan_count = 0
+    for title, text in existing_sections.items():
+        if title not in handled_existing and text.strip():
+            final_parts.append(text)
+            orphan_count += 1
 
     full_article = "\n\n".join(p for p in final_parts if p.strip())
-    logger.info("[Rewrite] Complete — %d existing sections preserved, %d new sections added, %d total tokens",
-                len(existing_sections), new_sections_added, total_in + total_out)
+    logger.info(
+        "[Rewrite] Complete — %d existing preserved, %d enriched, %d new, %d orphans, %d tokens",
+        len(handled_existing), enriched_count, new_sections_count, orphan_count,
+        total_in + total_out,
+    )
     return full_article, total_in, total_out
 
 
